@@ -36,6 +36,7 @@ export type ChatMessage = {
   text: string;
   productIds?: number[];
   cta?: { label: string; url: string };
+  suggestions?: string[];
 };
 
 export type CommerceAction =
@@ -53,5 +54,6 @@ export type ChatResponse = {
   actions?: CommerceAction[];
   productIds?: number[];
   cta?: { label: string; url: string };
+  suggestions?: string[];
   needsAI?: boolean;
 };
