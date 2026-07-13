@@ -135,6 +135,25 @@ export function respondToCustomer(
     };
   }
 
+  const mentionedCategoryIds = [...new Set([
+    ...CATEGORIES
+      .filter((item) => item.id !== 'semua' && text.includes(item.label.toLowerCase()))
+      .map((item) => item.id),
+    ...products.map((product) => product.category),
+  ])].filter((id) => id !== 'semua');
+
+  if (mentionedCategoryIds.length >= 2) {
+    const labels = mentionedCategoryIds.map((id) => CATEGORIES.find((item) => item.id === id)?.label.toLowerCase()).filter(Boolean);
+    const recommendations = mentionedCategoryIds.flatMap((id) =>
+      PRODUCTS.filter((product) => product.category === id && product.stock > 0).slice(0, 2),
+    );
+    return {
+      reply: `Siap, Kak. Kita bisa belanja ${labels.join(' dan ')} sekaligus. Saya tampilkan beberapa pilihan yang tersedia—mau pilih yang mana dulu?`,
+      action: { type: 'none' },
+      productIds: [...new Set(recommendations.map((product) => product.id))].slice(0, 4),
+    };
+  }
+
   if (/(keranjang|belanjaan saya)/.test(text) && !/(tambah|masukkan)/.test(text)) {
     return {
       reply: cart.length
@@ -182,9 +201,19 @@ export function respondToCustomer(
 
   if (category && !exactProduct) {
     const categoryProducts = PRODUCTS.filter((product) => product.category === category.id && product.stock > 0);
+
+    if (/\b(juga|selain|lagi|berikutnya)\b/.test(text)) {
+      return {
+        reply: `Siap, ${category.label.toLowerCase()} juga. Yang tersedia antara lain ${categoryProducts.slice(0, 4).map((product) => product.name).join(', ')}. Mau yang mana?`,
+        action: { type: 'none' },
+        productIds: categoryProducts.slice(0, 4).map((product) => product.id),
+      };
+    }
+
     const ignoredWords = new Set([
       'saya', 'mau', 'ingin', 'beli', 'pesan', 'lihat', 'ada', 'cari', 'belanja',
-      'yang', 'dong', 'aja', 'saja', 'berapa', 'harga', 'kg', 'kilo', category.label.toLowerCase(),
+      'yang', 'dong', 'aja', 'saja', 'berapa', 'harga', 'kg', 'kilo', 'kan', 'terus',
+      'juga', 'selain', 'lagi', 'kategori', 'apa', category.label.toLowerCase(),
     ]);
     const unknownSpecificWords = text
       .split(' ')
