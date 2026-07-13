@@ -156,6 +156,18 @@ export function respondToCustomer(
         };
   }
 
+  if (/(hitung|total|berapa semua|jumlah belanja|lanjut pesan)/.test(text)) {
+    return cart.length
+      ? {
+          reply: `Siap. Subtotal ${cart.length} jenis barang adalah ${rupiah(cartTotal(cart))}. Saya buka keranjang agar Kakak bisa memeriksa sebelum lanjut ke alamat pengantaran.`,
+          action: { type: 'show_cart' },
+        }
+      : {
+          reply: 'Keranjang masih kosong, jadi belum ada total yang perlu dihitung. Saya buka semua menu dulu, ya.',
+          action: { type: 'open_store' },
+        };
+  }
+
   if (/(cukup|selesai|checkout|bayar sekarang|lanjut bayar)/.test(text)) {
     return cart.length
       ? {
