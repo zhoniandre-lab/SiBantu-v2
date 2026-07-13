@@ -25,15 +25,28 @@ const INITIAL_MESSAGES: ChatMessage[] = [
   },
 ];
 
-function ProductCard({ product, onAdd, compact = false }: { product: Product; onAdd: () => void; compact?: boolean }) {
+function ProductCard({
+  product,
+  onAdd,
+  compact = false,
+  cartQty = 0,
+}: {
+  product: Product;
+  onAdd: () => void;
+  compact?: boolean;
+  cartQty?: number;
+}) {
   return (
-    <article className={`product-card ${compact ? 'compact' : ''}`}>
+    <article className={`product-card ${compact ? 'compact' : ''} ${cartQty > 0 ? 'in-cart' : ''}`}>
       <div className="product-visual" aria-hidden="true">
         <span>{product.emoji}</span>
         {product.badge && <small>{product.badge}</small>}
       </div>
       <div className="product-copy">
-        <div className="stock-line">{product.stock > 0 ? `Tersedia • ${product.stock}` : 'Stok habis'}</div>
+        <div className="stock-line">
+          <span>{product.stock > 0 ? `Tersedia • ${product.stock}` : 'Stok habis'}</span>
+          {cartQty > 0 && <b>{cartQty} di keranjang</b>}
+        </div>
         <h3>{product.name}</h3>
         {!compact && <p>{product.description}</p>}
         <div className="product-bottom">
@@ -41,8 +54,13 @@ function ProductCard({ product, onAdd, compact = false }: { product: Product; on
             <strong>{rupiah(product.price)}</strong>
             <span>/ {product.unit}</span>
           </div>
-          <button onClick={onAdd} disabled={product.stock <= 0} aria-label={`Tambah ${product.name}`}>
-            +
+          <button
+            className={cartQty > 0 ? 'added' : ''}
+            onClick={onAdd}
+            disabled={product.stock <= 0}
+            aria-label={`Tambah ${product.name}`}
+          >
+            {cartQty > 0 ? '✓' : '+'}
           </button>
         </div>
       </div>
@@ -62,8 +80,10 @@ export default function SiBantuApp() {
   const [cartOpen, setCartOpen] = useState(false);
   const [checkoutOpen, setCheckoutOpen] = useState(false);
   const [locationStatus, setLocationStatus] = useState('Lokasi belum dipilih');
+  const [toast, setToast] = useState<{ id: number; text: string } | null>(null);
   const [checkout, setCheckout] = useState<CheckoutData>({ name: '', whatsapp: '', address: '', landmark: '' });
   const endRef = useRef<HTMLDivElement>(null);
+  const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     const existingSession = sessionStorage.getItem('sibantu_v2_session') || makeId('SES');
@@ -76,6 +96,12 @@ export default function SiBantuApp() {
     } catch {
       setCart([]);
     }
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
+    };
   }, []);
 
   useEffect(() => {
@@ -98,7 +124,15 @@ export default function SiBantuApp() {
     });
   }, [category, query]);
 
+  function showCartToast(productName: string, qty: number) {
+    if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
+    setToast({ id: Date.now(), text: `${productName} × ${qty} masuk ke keranjang` });
+    toastTimerRef.current = setTimeout(() => setToast(null), 2600);
+  }
+
   function addToCart(productId: number, qty = 1) {
+    const product = findProduct(productId);
+    if (product) showCartToast(product.name, qty);
     setCart((current) => {
       const existing = current.find((item) => item.productId === productId);
       if (existing) return current.map((item) => (item.productId === productId ? { ...item, qty: item.qty + qty } : item));
@@ -181,6 +215,30 @@ export default function SiBantuApp() {
     setView('store');
   }
 
+  function continueShoppingInChat() {
+    const selectedNames = cart
+      .map((item) => {
+        const product = findProduct(item.productId);
+        return product ? `${product.name} × ${item.qty}` : null;
+      })
+      .filter(Boolean);
+
+    const summary = selectedNames.length <= 3
+      ? selectedNames.join(', ')
+      : `${selectedNames.slice(0, 3).join(', ')}, dan ${selectedNames.length - 3} barang lainnya`;
+
+    setMessages((current) => [
+      ...current,
+      {
+        id: makeId('msg'),
+        role: 'assistant',
+        text: `Pilihan Kakak sudah masuk: ${summary}. Yuk lanjut ngobrol—mau tambah barang, ubah jumlah, atau saya bantu lanjut menghitung pesanan?`,
+        productIds: cart.slice(0, 3).map((item) => item.productId),
+      },
+    ]);
+    setView('chat');
+  }
+
   function useLocation() {
     if (!navigator.geolocation) {
       setLocationStatus('GPS tidak tersedia di perangkat ini');
@@ -238,7 +296,13 @@ export default function SiBantuApp() {
                     {message.productIds?.length ? (
                       <div className="inline-products">
                         {message.productIds.map(findProduct).filter(Boolean).map((product) => (
-                          <ProductCard key={product!.id} product={product!} compact onAdd={() => addToCart(product!.id)} />
+                          <ProductCard
+                            key={product!.id}
+                            product={product!}
+                            compact
+                            cartQty={cart.find((item) => item.productId === product!.id)?.qty ?? 0}
+                            onAdd={() => addToCart(product!.id)}
+                          />
                         ))}
                       </div>
                     ) : null}
@@ -278,10 +342,34 @@ export default function SiBantuApp() {
           </div>
           <div className="store-heading"><div><small>{category === 'semua' ? 'SEMUA PRODUK' : `KATEGORI ${category.toUpperCase()}`}</small><h2>{visibleProducts.length} barang tersedia</h2></div><button>Urutkan: Terlaris⌄</button></div>
           <div className="product-grid">
-            {visibleProducts.map((product) => <ProductCard key={product.id} product={product} onAdd={() => addToCart(product.id)} />)}
+            {visibleProducts.map((product) => (
+              <ProductCard
+                key={product.id}
+                product={product}
+                cartQty={cart.find((item) => item.productId === product.id)?.qty ?? 0}
+                onAdd={() => addToCart(product.id)}
+              />
+            ))}
           </div>
-          {cartCount > 0 && <button className="floating-cart" onClick={() => setCartOpen(true)}><span>🛒 {cartCount} barang</span><strong>{rupiah(subtotal)} →</strong></button>}
+          {cartCount > 0 && (
+            <div className="store-action-dock">
+              <button className="continue-chat" onClick={continueShoppingInChat}>
+                <span>💬</span><b>Lanjut ngobrol</b><small>Biar SiBantu bantu siapkan</small>
+              </button>
+              <button className="floating-cart" onClick={() => setCartOpen(true)}>
+                <span>🛒 {cartCount} barang</span><strong>{rupiah(subtotal)} →</strong>
+              </button>
+            </div>
+          )}
         </section>
+      )}
+
+      {toast && (
+        <div key={toast.id} className="cart-toast" role="status">
+          <span>✓</span>
+          <div><b>Berhasil ditambahkan</b><small>{toast.text}</small></div>
+          <button onClick={() => { setToast(null); setCartOpen(true); }}>Lihat</button>
+        </div>
       )}
 
       {cartOpen && (
