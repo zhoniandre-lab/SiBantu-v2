@@ -51,6 +51,8 @@ ATURAN KERAS:
 8. Jangan menyebut JSON, prompt, sistem, ID produk, model AI, atau istilah teknis.
 9. Jangan mengarang promo atau ongkir.
 10. Maksimal sekitar 70 kata per jawaban kecuali pelanggan meminta rincian.
+11. Jika pelanggan menyebut beberapa produk dalam satu pesan, gunakan array actions agar SEMUA produk diproses; jangan hanya mengambil produk pertama.
+12. Hubungkan jumlah dengan produk berdasarkan urutan penyebutan. “Nila 3 kg dan Lele 2 kg” berarti Nila=3 dan Lele=2.
 
 ACTION YANG TERSEDIA:
 - none: hanya menjawab/bertanya.
@@ -80,8 +82,11 @@ Jawab: {"reply":"Ikan patin belum tersedia. Yang ada ikan nila dan ikan lele. Ma
 Pelanggan: "Saya mau beli ikan terus belanja sayur juga"
 Jawab: {"reply":"Siap, Kak. Kita belanja ikan dan sayur sekaligus. Untuk ikan ada nila atau lele; untuk sayur ada kacang panjang atau bayam. Mau pilih ikan dulu?","action":{"type":"none"},"productIds":[10,11,1,2]}
 
+Pelanggan: "Ikan nila 3 kg dan ikan lele 2 kg"
+Jawab: {"reply":"Siap, 3 kg ikan nila dan 2 kg ikan lele saya masukkan.","action":{"type":"none"},"actions":[{"type":"add","productId":10,"qty":3},{"type":"add","productId":11,"qty":2}],"productIds":[10,11]}
+
 Balas WAJIB sebagai satu objek JSON valid tanpa markdown dan tanpa teks lain:
-{"reply":"jawaban natural","action":{"type":"none|open_store|show_cart|checkout|add|set|remove","productId":10,"qty":1,"category":"ikan"},"productIds":[10,11]}`;
+{"reply":"jawaban natural","action":{"type":"none|open_store|show_cart|checkout|add|set|remove","productId":10,"qty":1,"category":"ikan"},"actions":[{"type":"add|set|remove","productId":10,"qty":1}],"productIds":[10,11]}`;
 }
 
 function extractJSON(content: string) {
@@ -100,40 +105,49 @@ function extractJSON(content: string) {
   return null;
 }
 
+function normalizeAction(value: unknown): CommerceAction {
+  if (!value || typeof value !== 'object') return { type: 'none' };
+  const rawAction = value as Record<string, unknown>;
+  const type = String(rawAction.type ?? 'none');
+  if (!ALLOWED_ACTIONS.has(type)) return { type: 'none' };
+
+  if (type === 'add' || type === 'set') {
+    const productId = Number(rawAction.productId);
+    const qty = Math.max(0.1, Math.min(99, Number(rawAction.qty) || 1));
+    if (findProduct(productId)) return { type, productId, qty };
+  }
+  if (type === 'remove') {
+    const productId = Number(rawAction.productId);
+    if (findProduct(productId)) return { type: 'remove', productId };
+  }
+  if (type === 'open_store') {
+    const category = String(rawAction.category ?? '');
+    const allowed = ['sayur', 'ikan', 'buah', 'sembako', 'daging', 'bumbu', 'rumah'];
+    return allowed.includes(category)
+      ? { type: 'open_store', category: category as 'sayur' | 'ikan' | 'buah' | 'sembako' | 'daging' | 'bumbu' | 'rumah' }
+      : { type: 'open_store' };
+  }
+  if (type === 'show_cart') return { type: 'show_cart' };
+  if (type === 'checkout') return { type: 'checkout' };
+  return { type: 'none' };
+}
+
 function normalizeAIResponse(value: unknown, fallback: ChatResponse): ChatResponse {
   if (!value || typeof value !== 'object') return fallback;
   const data = value as Record<string, unknown>;
-  let reply = String(data.reply ?? '').trim();
+  const reply = String(data.reply ?? '').trim();
   const leakedPrompt = /KATALOG TOKO|ATURAN KERAS|ACTION YANG TERSEDIA|system prompt|kamu adalah SiBantu/i.test(reply);
   if (!reply || reply.length > 700 || leakedPrompt) return fallback;
 
-  const rawAction = data.action && typeof data.action === 'object' ? (data.action as Record<string, unknown>) : {};
-  const type = String(rawAction.type ?? 'none');
-  let action: CommerceAction = { type: 'none' };
-
-  if (ALLOWED_ACTIONS.has(type)) {
-    if (type === 'add' || type === 'set') {
-      const productId = Number(rawAction.productId);
-      const qty = Math.max(0.1, Math.min(99, Number(rawAction.qty) || 1));
-      if (findProduct(productId)) action = { type, productId, qty };
-    } else if (type === 'remove') {
-      const productId = Number(rawAction.productId);
-      if (findProduct(productId)) action = { type: 'remove', productId };
-    } else if (type === 'open_store') {
-      const category = String(rawAction.category ?? '');
-      const allowed = ['sayur', 'ikan', 'buah', 'sembako', 'daging', 'bumbu', 'rumah'];
-      action = allowed.includes(category)
-        ? { type: 'open_store', category: category as 'sayur' | 'ikan' | 'buah' | 'sembako' | 'daging' | 'bumbu' | 'rumah' }
-        : { type: 'open_store' };
-    } else if (type === 'show_cart') action = { type: 'show_cart' };
-    else if (type === 'checkout') action = { type: 'checkout' };
-  }
-
+  const action = normalizeAction(data.action);
+  const actions = Array.isArray(data.actions)
+    ? data.actions.map(normalizeAction).filter((item) => item.type !== 'none').slice(0, 8)
+    : undefined;
   const productIds = Array.isArray(data.productIds)
     ? [...new Set(data.productIds.map(Number))].filter((id) => Boolean(findProduct(id))).slice(0, 4)
     : undefined;
 
-  return { reply, action, productIds };
+  return { reply, action, actions: actions?.length ? actions : undefined, productIds };
 }
 
 async function askAI(history: ChatMessage[], cart: CartItem[], fallback: ChatResponse) {
