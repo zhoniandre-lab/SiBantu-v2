@@ -20,6 +20,9 @@ export type Product = {
   badge?: string;
   step?: number;
   quickQuantities?: number[];
+  baseUnit?: string;
+  packageSize?: number;
+  allowPartial?: boolean;
 };
 
 export type CartItem = {
@@ -32,6 +35,7 @@ export type ChatMessage = {
   role: 'assistant' | 'user';
   text: string;
   productIds?: number[];
+  cta?: { label: string; url: string };
 };
 
 export type CommerceAction =
@@ -48,5 +52,6 @@ export type ChatResponse = {
   action: CommerceAction;
   actions?: CommerceAction[];
   productIds?: number[];
+  cta?: { label: string; url: string };
   needsAI?: boolean;
 };
