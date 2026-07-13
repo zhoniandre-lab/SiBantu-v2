@@ -16,6 +16,29 @@ type CheckoutData = {
   longitude?: number;
 };
 
+type BrowserSpeechRecognition = {
+  lang: string;
+  continuous: boolean;
+  interimResults: boolean;
+  maxAlternatives: number;
+  start: () => void;
+  stop: () => void;
+  abort: () => void;
+  onstart: (() => void) | null;
+  onend: (() => void) | null;
+  onerror: ((event: { error?: string }) => void) | null;
+  onresult: ((event: { results: ArrayLike<{ 0: { transcript: string } }> }) => void) | null;
+};
+
+type BrowserSpeechRecognitionConstructor = new () => BrowserSpeechRecognition;
+
+declare global {
+  interface Window {
+    SpeechRecognition?: BrowserSpeechRecognitionConstructor;
+    webkitSpeechRecognition?: BrowserSpeechRecognitionConstructor;
+  }
+}
+
 const INITIAL_MESSAGES: ChatMessage[] = [
   {
     id: 'welcome',
@@ -75,6 +98,7 @@ export default function SiBantuApp() {
   const [sessionId, setSessionId] = useState('');
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
+  const [listening, setListening] = useState(false);
   const [category, setCategory] = useState<CategoryId | 'semua'>('semua');
   const [query, setQuery] = useState('');
   const [cartOpen, setCartOpen] = useState(false);
@@ -86,6 +110,7 @@ export default function SiBantuApp() {
   const [checkout, setCheckout] = useState<CheckoutData>({ name: '', whatsapp: '', address: '', landmark: '' });
   const endRef = useRef<HTMLDivElement>(null);
   const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const speechRecognitionRef = useRef<BrowserSpeechRecognition | null>(null);
 
   useEffect(() => {
     const existingSession = sessionStorage.getItem('sibantu_v2_session') || makeId('SES');
@@ -103,6 +128,7 @@ export default function SiBantuApp() {
   useEffect(() => {
     return () => {
       if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
+      speechRecognitionRef.current?.abort();
     };
   }, []);
 
@@ -183,6 +209,57 @@ export default function SiBantuApp() {
       default:
         break;
     }
+  }
+
+  function startVoiceInput() {
+    if (listening) {
+      speechRecognitionRef.current?.stop();
+      return;
+    }
+
+    const SpeechRecognitionAPI = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SpeechRecognitionAPI) {
+      setMessages((current) => [
+        ...current,
+        {
+          id: makeId('msg'),
+          role: 'assistant',
+          text: 'Input suara belum didukung browser ini. Gunakan Chrome Android terbaru dan izinkan akses mikrofon.',
+        },
+      ]);
+      return;
+    }
+
+    const recognition = new SpeechRecognitionAPI();
+    speechRecognitionRef.current = recognition;
+    recognition.lang = 'id-ID';
+    recognition.continuous = false;
+    recognition.interimResults = false;
+    recognition.maxAlternatives = 1;
+    recognition.onstart = () => setListening(true);
+    recognition.onend = () => {
+      setListening(false);
+      speechRecognitionRef.current = null;
+    };
+    recognition.onerror = (event) => {
+      setListening(false);
+      const denied = event.error === 'not-allowed' || event.error === 'service-not-allowed';
+      setMessages((current) => [
+        ...current,
+        {
+          id: makeId('msg'),
+          role: 'assistant',
+          text: denied
+            ? 'Akses mikrofon belum diizinkan. Tekan ikon gembok pada browser, izinkan Mikrofon, lalu coba lagi.'
+            : 'Suara belum terbaca. Coba bicara lebih dekat dan ulangi sekali lagi.',
+        },
+      ]);
+    };
+    recognition.onresult = (event) => {
+      const transcript = event.results[0]?.[0]?.transcript?.trim();
+      if (transcript) setInput(transcript);
+    };
+    recognition.start();
   }
 
   async function sendMessage(event?: FormEvent) {
@@ -334,8 +411,21 @@ export default function SiBantuApp() {
               <button onClick={() => setInput('Carikan belanja sesuai budget saya')}>✨ Belanja Pintar</button>
             </div>
             <form className="composer" onSubmit={sendMessage}>
-              <button type="button" className="icon-button" title="Input suara segera hadir">🎙️</button>
-              <input value={input} onChange={(event) => setInput(event.target.value)} placeholder="Contoh: ada ikan nila?" maxLength={500} />
+              <button
+                type="button"
+                className={`icon-button ${listening ? 'listening' : ''}`}
+                title={listening ? 'Hentikan rekaman' : 'Bicara dengan SiBantu'}
+                onClick={startVoiceInput}
+                aria-label={listening ? 'Hentikan rekaman suara' : 'Mulai input suara'}
+              >
+                {listening ? '■' : '🎙️'}
+              </button>
+              <input
+                value={input}
+                onChange={(event) => setInput(event.target.value)}
+                placeholder={listening ? 'Silakan bicara sekarang...' : 'Contoh: ada ikan nila?'}
+                maxLength={500}
+              />
               <button type="submit" disabled={!input.trim() || loading}>➤</button>
             </form>
           </div>
