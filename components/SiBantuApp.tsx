@@ -285,7 +285,8 @@ export default function SiBantuApp() {
         ...current,
         { id: makeId('msg'), role: 'assistant', text: result.reply, productIds: result.productIds },
       ]);
-      executeAction(result.action);
+      if (result.actions?.length) result.actions.forEach(executeAction);
+      else executeAction(result.action);
     } catch {
       setMessages((current) => [
         ...current,
