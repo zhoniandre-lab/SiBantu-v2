@@ -2,7 +2,7 @@
 
 import { FormEvent, useEffect, useMemo, useRef, useState } from 'react';
 import { CATEGORIES, PRODUCTS, findProduct } from '@/lib/catalog';
-import { makeId, rupiah } from '@/lib/format';
+import { formatQty, makeId, rupiah } from '@/lib/format';
 import type { CartItem, CategoryId, ChatMessage, ChatResponse, CommerceAction, Product } from '@/lib/types';
 
 type ViewMode = 'chat' | 'store';
@@ -45,7 +45,7 @@ function ProductCard({
       <div className="product-copy">
         <div className="stock-line">
           <span>{product.stock > 0 ? `Tersedia • ${product.stock}` : 'Stok habis'}</span>
-          {cartQty > 0 && <b>{cartQty} di keranjang</b>}
+          {cartQty > 0 && <b>{formatQty(cartQty)} {product.unit} di keranjang</b>}
         </div>
         <h3>{product.name}</h3>
         {!compact && <p>{product.description}</p>}
@@ -79,6 +79,8 @@ export default function SiBantuApp() {
   const [query, setQuery] = useState('');
   const [cartOpen, setCartOpen] = useState(false);
   const [checkoutOpen, setCheckoutOpen] = useState(false);
+  const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
+  const [pickerQty, setPickerQty] = useState(1);
   const [locationStatus, setLocationStatus] = useState('Lokasi belum dipilih');
   const [toast, setToast] = useState<{ id: number; text: string } | null>(null);
   const [checkout, setCheckout] = useState<CheckoutData>({ name: '', whatsapp: '', address: '', landmark: '' });
@@ -112,7 +114,7 @@ export default function SiBantuApp() {
     if (view === 'chat') endRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, loading, view]);
 
-  const cartCount = cart.reduce((sum, item) => sum + item.qty, 0);
+  const cartCount = cart.length;
   const subtotal = cart.reduce((sum, item) => sum + (findProduct(item.productId)?.price ?? 0) * item.qty, 0);
 
   const visibleProducts = useMemo(() => {
@@ -124,15 +126,26 @@ export default function SiBantuApp() {
     });
   }, [category, query]);
 
-  function showCartToast(productName: string, qty: number) {
+  function showCartToast(productName: string, qty: number, unit: string) {
     if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
-    setToast({ id: Date.now(), text: `${productName} × ${qty} masuk ke keranjang` });
+    setToast({ id: Date.now(), text: `${formatQty(qty)} ${unit} ${productName} masuk ke keranjang` });
     toastTimerRef.current = setTimeout(() => setToast(null), 2600);
+  }
+
+  function openProductPicker(product: Product) {
+    setSelectedProduct(product);
+    setPickerQty(product.quickQuantities?.[0] ?? product.step ?? 1);
+  }
+
+  function confirmProductPicker() {
+    if (!selectedProduct) return;
+    addToCart(selectedProduct.id, pickerQty);
+    setSelectedProduct(null);
   }
 
   function addToCart(productId: number, qty = 1) {
     const product = findProduct(productId);
-    if (product) showCartToast(product.name, qty);
+    if (product) showCartToast(product.name, qty, product.unit);
     setCart((current) => {
       const existing = current.find((item) => item.productId === productId);
       if (existing) return current.map((item) => (item.productId === productId ? { ...item, qty: item.qty + qty } : item));
@@ -219,7 +232,7 @@ export default function SiBantuApp() {
     const selectedNames = cart
       .map((item) => {
         const product = findProduct(item.productId);
-        return product ? `${product.name} × ${item.qty}` : null;
+        return product ? `${product.name} ${formatQty(item.qty)} ${product.unit}` : null;
       })
       .filter(Boolean);
 
@@ -301,7 +314,7 @@ export default function SiBantuApp() {
                             product={product!}
                             compact
                             cartQty={cart.find((item) => item.productId === product!.id)?.qty ?? 0}
-                            onAdd={() => addToCart(product!.id)}
+                            onAdd={() => openProductPicker(product!)}
                           />
                         ))}
                       </div>
@@ -347,7 +360,7 @@ export default function SiBantuApp() {
                 key={product.id}
                 product={product}
                 cartQty={cart.find((item) => item.productId === product.id)?.qty ?? 0}
-                onAdd={() => addToCart(product.id)}
+                onAdd={() => openProductPicker(product)}
               />
             ))}
           </div>
@@ -372,6 +385,35 @@ export default function SiBantuApp() {
         </div>
       )}
 
+      {selectedProduct && (
+        <div className="overlay product-picker-overlay" onMouseDown={(event) => event.target === event.currentTarget && setSelectedProduct(null)}>
+          <section className="product-picker">
+            <button className="picker-close" onClick={() => setSelectedProduct(null)}>×</button>
+            <div className="picker-visual">{selectedProduct.emoji}</div>
+            <small>{selectedProduct.category.toUpperCase()}</small>
+            <h2>{selectedProduct.name}</h2>
+            <p>{selectedProduct.description}</p>
+            <div className="picker-price"><strong>{rupiah(selectedProduct.price)}</strong><span>per {selectedProduct.unit}</span></div>
+            <div className="picker-label"><b>Pilih jumlah</b><span>Bisa diubah lagi di keranjang</span></div>
+            <div className="quick-quantities">
+              {(selectedProduct.quickQuantities ?? [selectedProduct.step ?? 1]).map((qty) => (
+                <button className={pickerQty === qty ? 'active' : ''} key={qty} onClick={() => setPickerQty(qty)}>
+                  {formatQty(qty)} {selectedProduct.unit}
+                </button>
+              ))}
+            </div>
+            <div className="picker-stepper">
+              <button onClick={() => setPickerQty((current) => Math.max(selectedProduct.step ?? 1, current - (selectedProduct.step ?? 1)))}>−</button>
+              <div><strong>{formatQty(pickerQty)}</strong><span>{selectedProduct.unit}</span></div>
+              <button onClick={() => setPickerQty((current) => current + (selectedProduct.step ?? 1))}>+</button>
+            </div>
+            <button className="picker-confirm" onClick={confirmProductPicker}>
+              <span>Masukkan ke keranjang</span><strong>{rupiah(selectedProduct.price * pickerQty)}</strong>
+            </button>
+          </section>
+        </div>
+      )}
+
       {cartOpen && (
         <div className="overlay" onMouseDown={(event) => event.target === event.currentTarget && setCartOpen(false)}>
           <aside className="drawer">
@@ -381,7 +423,8 @@ export default function SiBantuApp() {
               {cart.map((item) => {
                 const product = findProduct(item.productId);
                 if (!product) return null;
-                return <div className="cart-line" key={item.productId}><div className="cart-emoji">{product.emoji}</div><div className="cart-info"><h3>{product.name}</h3><span>{rupiah(product.price)} / {product.unit}</span><button onClick={() => setCartQty(product.id, 0)}>Hapus</button></div><div className="stepper"><button onClick={() => setCartQty(product.id, item.qty - 1)}>−</button><b>{item.qty}</b><button onClick={() => addToCart(product.id)}>+</button></div></div>;
+                const step = product.step ?? 1;
+                return <div className="cart-line" key={item.productId}><div className="cart-emoji">{product.emoji}</div><div className="cart-info"><h3>{product.name}</h3><span>{rupiah(product.price)} / {product.unit}</span><button onClick={() => setCartQty(product.id, 0)}>Hapus</button></div><div className="stepper"><button onClick={() => setCartQty(product.id, item.qty - step)}>−</button><b>{formatQty(item.qty)}<small>{product.unit}</small></b><button onClick={() => setCartQty(product.id, item.qty + step)}>+</button></div></div>;
               })}
             </div>
             {cart.length > 0 && <div className="drawer-total"><div><span>Subtotal</span><strong>{rupiah(subtotal)}</strong></div><small>Ongkir dihitung setelah memilih lokasi.</small><button onClick={() => { setCartOpen(false); setCheckoutOpen(true); }}>Lanjut pilih lokasi</button></div>}
