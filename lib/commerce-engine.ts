@@ -145,6 +145,15 @@ function resolveSaleQuantity(product: Product, requestedQty: number, text: strin
   return { cartQty: Math.round(packageCount) };
 }
 
+function recipeRecommendation(people: number): ChatResponse {
+  return {
+    reply: `Untuk ${formatQty(people)} orang, saya punya dua ide: ayam kecap dengan tumis kangkung, atau ikan nila sambal dengan sayur bayam. Bahannya tersedia di toko. Kakak lebih ingin menu ayam atau ikan?`,
+    action: { type: 'none' },
+    productIds: [20, 4, 10, 2],
+    suggestions: ['Pilih menu ayam', 'Pilih menu ikan', 'Saya mau menu sayur saja'],
+  };
+}
+
 function categoryFromText(text: string): { id: Exclude<(typeof CATEGORIES)[number]['id'], 'semua'>; label: string; emoji: string } | undefined {
   const found = CATEGORIES.find(
     (category) =>
@@ -165,6 +174,13 @@ export function respondToCustomer(
   const exactProduct = products[0];
   const category = categoryFromText(text);
   const qty = readQuantity(text);
+  const previousHistory = history.length && normalizeText(history[history.length - 1]?.text ?? '') === text
+    ? history.slice(0, -1)
+    : history;
+  const recentContext = previousHistory.slice(-8).map((message) => normalizeText(message.text)).join(' | ');
+  const recipeInContext = /(masak apa|makan apa|menu apa|rekomendasi masak|pilihkan menu|jumlah orang)/.test(recentContext);
+  const asksRecipeNow = /(masak apa|makan apa|menu apa|rekomendasi.*masak|pilihkan.*menu|enaknya masak)/.test(text);
+  const statesPeopleNow = /\b(orang|porsi)\b/.test(text) && /\b(\d+|satu|dua|tiga|empat|lima|enam|tujuh|delapan|sembilan|sepuluh)\b/.test(text);
 
   if (!text) return { reply: 'Tulis kebutuhan Kakak, ya.', action: { type: 'none' } };
 
@@ -172,6 +188,45 @@ export function respondToCustomer(
     return {
       reply: 'Halo, Kak! Mau belanja kebutuhan rumah, cari bahan masakan, atau lihat promo hari ini?',
       action: { type: 'none' },
+      suggestions: ['Bantu pilih menu hari ini', 'Lihat semua menu', 'Saya mau belanja'],
+    };
+  }
+
+  if ((asksRecipeNow && statesPeopleNow) || (recipeInContext && statesPeopleNow)) {
+    return recipeRecommendation(qty);
+  }
+
+  if (asksRecipeNow) {
+    return {
+      reply: 'Boleh, Kak. Lagi ingin menu ikan, ayam, atau sayuran? Kalau sudah bosan, saya bisa pilihkan resep sederhana dari bahan yang tersedia. Untuk berapa orang?',
+      action: { type: 'none' },
+      productIds: [10, 20, 2],
+      suggestions: ['Untuk 2 orang', 'Untuk 3 orang', 'Untuk 4 orang'],
+    };
+  }
+
+  if (recipeInContext && /\b(ikan|ayam|sayur|pilihkan)\b/.test(text)) {
+    if (/\b(ayam)\b/.test(text)) {
+      return {
+        reply: 'Pilihan bagus. Kita bisa buat ayam kecap dengan tumis kangkung. Ayam, kecap, bawang, dan kangkung tersedia. Mau saya siapkan bahan-bahannya?',
+        action: { type: 'none' },
+        productIds: [20, 54, 51, 4],
+        suggestions: ['Siapkan bahan menu ayam', 'Lihat menu ikan', 'Pilih menu lain'],
+      };
+    }
+    if (/\b(sayur)\b/.test(text)) {
+      return {
+        reply: 'Kalau ingin sayur saja, saya sarankan tumis kangkung dan terong balado. Bahannya ringan dan tersedia. Mau pilih salah satu atau keduanya?',
+        action: { type: 'none' },
+        productIds: [4, 3, 50, 51],
+        suggestions: ['Pilih tumis kangkung', 'Pilih terong balado', 'Keduanya'],
+      };
+    }
+    return {
+      reply: 'Kita pilih menu ikan nila sambal dengan sayur bayam. Ikan nila, cabai, bawang, dan bayam tersedia. Mau saya siapkan daftar bahannya?',
+      action: { type: 'none' },
+      productIds: [10, 50, 51, 2],
+      suggestions: ['Siapkan bahan menu ikan', 'Lihat menu ayam', 'Pilih menu lain'],
     };
   }
 
