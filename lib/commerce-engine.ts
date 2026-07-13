@@ -1,6 +1,6 @@
 import { CATEGORIES, PRODUCTS, findProduct } from './catalog';
 import { formatQty, rupiah } from './format';
-import type { CartItem, ChatMessage, ChatResponse, Product } from './types';
+import type { CartItem, ChatMessage, ChatResponse, CommerceAction, Product } from './types';
 
 const NUMBER_WORDS: Record<string, number> = {
   satu: 1,
@@ -79,11 +79,27 @@ export function searchProducts(text: string) {
 
 function readQuantity(text: string) {
   const decimal = text.match(/\b(\d+(?:[.,]\d+)?)\b/);
-  if (decimal) return Math.max(0.5, Math.min(99, Number(decimal[1].replace(',', '.'))));
+  if (decimal) return Math.max(0.1, Math.min(99, Number(decimal[1].replace(',', '.'))));
   for (const [word, value] of Object.entries(NUMBER_WORDS)) {
     if (new RegExp(`\\b${word}\\b`).test(text)) return value;
   }
   return 1;
+}
+
+function readAllQuantities(text: string) {
+  const numberPattern = Object.keys(NUMBER_WORDS).join('|');
+  const matches = text.match(new RegExp(`\\b(\\d+(?:[.,]\\d+)?|${numberPattern})\\b`, 'g')) ?? [];
+  return matches.map((value) => {
+    const normalized = value.toLowerCase();
+    const numeric = NUMBER_WORDS[normalized] ?? Number(normalized.replace(',', '.'));
+    return Math.max(0.1, Math.min(99, numeric || 1));
+  });
+}
+
+function productTextPosition(text: string, product: Product) {
+  const candidates = [product.name.toLowerCase(), ...product.aliases.map((alias) => alias.toLowerCase())];
+  const positions = candidates.map((candidate) => text.indexOf(candidate)).filter((position) => position >= 0);
+  return positions.length ? Math.min(...positions) : Number.MAX_SAFE_INTEGER;
 }
 
 function lastMentionedProduct(history: ChatMessage[]) {
@@ -136,6 +152,51 @@ export function respondToCustomer(
     return {
       reply: 'Siap. Saya buka Toko SiBantu—semua barang bisa dicari dan difilter berdasarkan kategori.',
       action: { type: 'open_store' },
+    };
+  }
+
+  const explicitProducts = products
+    .filter((product) => productTextPosition(text, product) !== Number.MAX_SAFE_INTEGER)
+    .sort((a, b) => productTextPosition(text, a) - productTextPosition(text, b));
+
+  if (explicitProducts.length >= 2) {
+    const quantities = readAllQuantities(text);
+    let assignedQuantities: number[] = [];
+
+    if (quantities.length >= explicitProducts.length) {
+      assignedQuantities = quantities.slice(0, explicitProducts.length);
+    } else if (quantities.length === 1 && /\b(masing|semuanya|sama sama|tiap)\b/.test(text)) {
+      assignedQuantities = explicitProducts.map(() => quantities[0]);
+    }
+
+    if (assignedQuantities.length !== explicitProducts.length) {
+      return {
+        reply: `Saya menangkap ${explicitProducts.map((product) => product.name).join(' dan ')}. Sebutkan jumlah masing-masing, ya. Contoh: “Nila 1 kg dan Lele 2 kg”.`,
+        action: { type: 'none' },
+        productIds: explicitProducts.slice(0, 4).map((product) => product.id),
+      };
+    }
+
+    const addingMore = /\b(tambah|tambahkan|lagi)\b/.test(text);
+    const actions: CommerceAction[] = explicitProducts.map((product, index) => {
+      const existing = cart.find((item) => item.productId === product.id);
+      const qty = assignedQuantities[index];
+      return existing && !addingMore
+        ? { type: 'set', productId: product.id, qty }
+        : { type: 'add', productId: product.id, qty };
+    });
+
+    const details = explicitProducts.map((product, index) => {
+      const existing = cart.find((item) => item.productId === product.id);
+      const verb = existing && !addingMore ? 'diubah menjadi' : 'ditambahkan';
+      return `${product.name} ${verb} ${formatQty(assignedQuantities[index])} ${product.unit}`;
+    });
+
+    return {
+      reply: `Siap, ${details.join(' dan ')}. Mau tambah barang lain atau lihat keranjang?`,
+      action: { type: 'none' },
+      actions,
+      productIds: explicitProducts.slice(0, 4).map((product) => product.id),
     };
   }
 
