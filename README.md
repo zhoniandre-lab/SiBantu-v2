@@ -59,3 +59,4 @@ Proyek ini sebaiknya memakai repository baru, misalnya `SiBantu-v2`, agar aplika
 ## Catatan data produk
 
 Harga, satuan, dan stok di `lib/catalog.ts` adalah data demo. Pada fase database, admin dapat mengubah semuanya tanpa mengedit GitHub.
+UI product picker updated.
