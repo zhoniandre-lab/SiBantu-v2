@@ -46,6 +46,7 @@ export type CommerceAction =
 export type ChatResponse = {
   reply: string;
   action: CommerceAction;
+  actions?: CommerceAction[];
   productIds?: number[];
   needsAI?: boolean;
 };
