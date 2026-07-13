@@ -263,9 +263,8 @@ export default function SiBantuApp() {
     recognition.start();
   }
 
-  async function sendMessage(event?: FormEvent) {
-    event?.preventDefault();
-    const text = input.trim();
+  async function submitText(rawText: string) {
+    const text = rawText.trim();
     if (!text || loading) return;
 
     const userMessage: ChatMessage = { id: makeId('msg'), role: 'user', text };
@@ -284,7 +283,7 @@ export default function SiBantuApp() {
       const result = (await response.json()) as ChatResponse;
       setMessages((current) => [
         ...current,
-        { id: makeId('msg'), role: 'assistant', text: result.reply, productIds: result.productIds, cta: result.cta },
+        { id: makeId('msg'), role: 'assistant', text: result.reply, productIds: result.productIds, cta: result.cta, suggestions: result.suggestions },
       ]);
       if (result.actions?.length) result.actions.forEach(executeAction);
       else executeAction(result.action);
@@ -300,6 +299,11 @@ export default function SiBantuApp() {
     } finally {
       setLoading(false);
     }
+  }
+
+  async function sendMessage(event?: FormEvent) {
+    event?.preventDefault();
+    await submitText(input);
   }
 
   function askCategory(id: CategoryId) {
@@ -390,6 +394,13 @@ export default function SiBantuApp() {
                         <span>💬</span><b>{message.cta.label}</b><small>{STORE_CONFIG.adminPhoneDisplay}</small>
                       </a>
                     )}
+                    {message.suggestions?.length ? (
+                      <div className="chat-suggestions">
+                        {message.suggestions.map((suggestion) => (
+                          <button key={suggestion} disabled={loading} onClick={() => void submitText(suggestion)}>{suggestion}</button>
+                        ))}
+                      </div>
+                    ) : null}
                     {message.productIds?.length ? (
                       <div className="inline-products">
                         {message.productIds.map(findProduct).filter(Boolean).map((product) => (
