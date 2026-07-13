@@ -30,7 +30,7 @@ export const PRODUCTS: Product[] = [
   { id: 21, name: 'Daging Sapi', category: 'daging', price: 120000, unit: 'kg', emoji: '🥩', step: 0.5, quickQuantities: [0.5, 1, 2], aliases: ['daging', 'sapi', 'daging sapi'], stock: 7, description: 'Untuk rendang, sop, dan semur.' },
   { id: 22, name: 'Telur Ayam', category: 'daging', price: 28000, unit: 'kg', emoji: '🥚', step: 0.5, quickQuantities: [0.5, 1, 2], aliases: ['telur', 'telur ayam'], stock: 30, description: 'Telur segar pilihan.' },
 
-  { id: 30, name: 'Beras Premium', category: 'sembako', price: 75000, unit: 'kemasan 5 kg', emoji: '🍚', step: 1, quickQuantities: [1, 2], aliases: ['beras', 'nasi'], stock: 25, description: 'Pulen dan bersih.' },
+  { id: 30, name: 'Beras Premium', category: 'sembako', price: 75000, unit: 'kemasan 5 kg', emoji: '🍚', step: 1, quickQuantities: [1, 2], baseUnit: 'kg', packageSize: 5, allowPartial: false, aliases: ['beras', 'nasi'], stock: 25, description: 'Pulen dan bersih. Dijual utuh per kemasan 5 kg.' },
   { id: 31, name: 'Minyak Goreng', category: 'sembako', price: 17000, unit: 'liter', emoji: '🫗', step: 1, quickQuantities: [1, 2, 3], aliases: ['minyak', 'minyak goreng', 'minyak gireng'], stock: 28, description: 'Minyak goreng kemasan.' },
   { id: 32, name: 'Gula Pasir', category: 'sembako', price: 16000, unit: 'kg', emoji: '🧂', step: 1, quickQuantities: [1, 2, 3], aliases: ['gula', 'gula pasir'], stock: 19, description: 'Butiran putih bersih.' },
   { id: 33, name: 'Tepung Terigu', category: 'sembako', price: 13000, unit: 'kg', emoji: '🌾', step: 1, quickQuantities: [1, 2, 3], aliases: ['tepung', 'terigu'], stock: 18, description: 'Untuk gorengan dan kue.' },
