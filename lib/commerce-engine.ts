@@ -170,6 +170,23 @@ export function respondToCustomer(
 
   if (category && !exactProduct) {
     const categoryProducts = PRODUCTS.filter((product) => product.category === category.id && product.stock > 0);
+    const ignoredWords = new Set([
+      'saya', 'mau', 'ingin', 'beli', 'pesan', 'lihat', 'ada', 'cari', 'belanja',
+      'yang', 'dong', 'aja', 'saja', 'berapa', 'harga', 'kg', 'kilo', category.label.toLowerCase(),
+    ]);
+    const unknownSpecificWords = text
+      .split(' ')
+      .filter((word) => word.length > 2 && !ignoredWords.has(word));
+
+    if (unknownSpecificWords.length > 0) {
+      return {
+        reply: `Saya belum menemukan ${unknownSpecificWords.join(' ')} di kategori ${category.label.toLowerCase()}. Saya cek pilihan yang tersedia dulu, ya.`,
+        action: { type: 'none' },
+        productIds: categoryProducts.slice(0, 3).map((product) => product.id),
+        needsAI: true,
+      };
+    }
+
     return {
       reply: `Ada ${categoryProducts.length} pilihan ${category.label.toLowerCase()} yang tersedia. Pilih salah satu atau buka semua produknya.`,
       action: { type: 'open_store', category: category.id },
@@ -226,10 +243,18 @@ export function respondToCustomer(
 
   if (/(makan apa|masak apa|rekomendasi|budget|anggaran|bahan untuk)/.test(text)) {
     return {
-      reply: 'Saya bisa bantu menyusun pilihan berdasarkan menu atau anggaran. Fitur rekomendasi pintar akan memakai katalog dan stok toko secara langsung.',
+      reply: 'Saya bisa bantu menyusun pilihan berdasarkan menu atau anggaran. Ceritakan kebutuhan dan jumlah orangnya, ya.',
       action: { type: 'none' },
       productIds: [10, 2, 30],
       needsAI: true,
+    };
+  }
+
+  if (/(mau|ingin|pengen).*(pesan|belanja|beli)/.test(text) || /(pesan|belanja|beli).*(apa|dong|aja)/.test(text)) {
+    return {
+      reply: 'Siap, Kak. Mau mulai dari ikan, sayur, daging, sembako, buah, atau bumbu? Bisa sebutkan barangnya atau pilih salah satu di bawah.',
+      action: { type: 'none' },
+      productIds: [10, 2, 20, 30],
     };
   }
 
