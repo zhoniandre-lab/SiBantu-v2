@@ -6,6 +6,10 @@ export function rupiah(value: number) {
   }).format(value);
 }
 
+export function formatQty(value: number) {
+  return new Intl.NumberFormat('id-ID', { maximumFractionDigits: 2 }).format(value);
+}
+
 export function makeId(prefix = 'id') {
   const random =
     typeof crypto !== 'undefined' && crypto.randomUUID
