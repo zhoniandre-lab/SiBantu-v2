@@ -1,5 +1,5 @@
 import { CATEGORIES, PRODUCTS, findProduct } from './catalog';
-import { rupiah } from './format';
+import { formatQty, rupiah } from './format';
 import type { CartItem, ChatMessage, ChatResponse, Product } from './types';
 
 const NUMBER_WORDS: Record<string, number> = {
@@ -26,6 +26,7 @@ export function normalizeText(input: string) {
     .replace(/\b(gireng|gorng)\b/g, 'goreng')
     .replace(/\b(ikam|ikn)\b/g, 'ikan')
     .replace(/\b(pesen|psan)\b/g, 'pesan')
+    .replace(/\b(pesnaan|psanan|pesaan)\b/g, 'pesanan')
     .replace(/\b(gk|ga|ngga|ngak)\b/g, 'tidak')
     .replace(/[^a-z0-9.,\s]/g, ' ')
     .replace(/\s+/g, ' ')
@@ -137,10 +138,22 @@ export function respondToCustomer(
   if (/(keranjang|belanjaan saya)/.test(text) && !/(tambah|masukkan)/.test(text)) {
     return {
       reply: cart.length
-        ? `Ada ${cart.reduce((sum, item) => sum + item.qty, 0)} item dengan subtotal ${rupiah(cartTotal(cart))}. Silakan diperiksa.`
+        ? `Ada ${cart.length} jenis barang dengan subtotal ${rupiah(cartTotal(cart))}. Silakan diperiksa.`
         : 'Keranjang Kakak masih kosong. Mau saya buka semua menu?',
       action: cart.length ? { type: 'show_cart' } : { type: 'open_store' },
     };
+  }
+
+  if (/(ubah|ganti|edit|koreksi)/.test(text) && /(pesanan|belanjaan|keranjang)/.test(text)) {
+    return cart.length
+      ? {
+          reply: 'Tentu bisa. Saya buka keranjang Kakak—jumlah bisa ditambah, dikurangi, atau barangnya dihapus.',
+          action: { type: 'show_cart' },
+        }
+      : {
+          reply: 'Keranjang masih kosong, jadi belum ada pesanan yang bisa diubah. Saya buka semua menu dulu, ya.',
+          action: { type: 'open_store' },
+        };
   }
 
   if (/(cukup|selesai|checkout|bayar sekarang|lanjut bayar)/.test(text)) {
@@ -175,7 +188,7 @@ export function respondToCustomer(
 
   if (/(jadi|ubah|ganti|kurangi)/.test(text) && contextualProduct && /\b(\d+|satu|dua|tiga|empat|lima)\b/.test(text)) {
     return {
-      reply: `Baik, jumlah ${contextualProduct.name} saya ubah menjadi ${qty} ${contextualProduct.unit}.`,
+      reply: `Baik, jumlah ${contextualProduct.name} saya ubah menjadi ${formatQty(qty)} ${contextualProduct.unit}.`,
       action: { type: 'set', productId: contextualProduct.id, qty },
       productIds: [contextualProduct.id],
     };
@@ -198,7 +211,7 @@ export function respondToCustomer(
         };
       }
       return {
-        reply: `Siap, ${contextualProduct.name} ${qty} × ${contextualProduct.unit} saya masukkan. Mau tambah yang lain atau lihat keranjang?`,
+        reply: `Siap, ${formatQty(qty)} ${contextualProduct.unit} ${contextualProduct.name} saya masukkan. Mau tambah yang lain atau lihat keranjang?`,
         action: { type: 'add', productId: contextualProduct.id, qty },
         productIds: [contextualProduct.id],
       };
