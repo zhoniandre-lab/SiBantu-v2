@@ -18,6 +18,8 @@ export type Product = {
   stock: number;
   description: string;
   badge?: string;
+  step?: number;
+  quickQuantities?: number[];
 };
 
 export type CartItem = {
