@@ -1,5 +1,6 @@
 import { CATEGORIES, PRODUCTS, findProduct } from './catalog';
 import { formatQty, rupiah } from './format';
+import { adminWhatsAppUrl, STORE_CONFIG } from './store-config';
 import type { CartItem, ChatMessage, ChatResponse, CommerceAction, Product } from './types';
 
 const NUMBER_WORDS: Record<string, number> = {
@@ -118,6 +119,32 @@ function cartTotal(cart: CartItem[]) {
   }, 0);
 }
 
+function resolveSaleQuantity(product: Product, requestedQty: number, text: string) {
+  const requestsBaseUnit = product.baseUnit === 'kg' && /\b(kg|kilo|kilogram)\b/.test(text);
+  if (!product.packageSize || !product.baseUnit || !requestsBaseUnit) {
+    return { cartQty: requestedQty };
+  }
+
+  const packageCount = requestedQty / product.packageSize;
+  const isWholePackage = Math.abs(packageCount - Math.round(packageCount)) < 0.00001 && packageCount >= 1;
+  if (product.allowPartial === false && !isWholePackage) {
+    const adminMessage = `Halo Admin SiBantu, pelanggan ingin memesan ${product.name} ${formatQty(requestedQty)} ${product.baseUnit}. Apakah bisa dibuat pesanan khusus di luar ${product.unit}?`;
+    return {
+      error: {
+        reply: `Belum bisa langsung, Kak. ${product.name} saat ini hanya dijual utuh per ${product.unit} seharga ${rupiah(product.price)}. Permintaan ${formatQty(requestedQty)} ${product.baseUnit} belum tersedia. Kalau Kakak mau, saya bantu tanyakan pesanan khusus ke admin ${STORE_CONFIG.adminPhoneDisplay}.`,
+        action: { type: 'none' } as CommerceAction,
+        productIds: [product.id],
+        cta: {
+          label: 'Tanya admin via WhatsApp',
+          url: adminWhatsAppUrl(adminMessage),
+        },
+      } satisfies ChatResponse,
+    };
+  }
+
+  return { cartQty: Math.round(packageCount) };
+}
+
 function categoryFromText(text: string): { id: Exclude<(typeof CATEGORIES)[number]['id'], 'semua'>; label: string; emoji: string } | undefined {
   const found = CATEGORIES.find(
     (category) =>
@@ -177,10 +204,17 @@ export function respondToCustomer(
       };
     }
 
+    const resolvedQuantities = explicitProducts.map((product, index) =>
+      resolveSaleQuantity(product, assignedQuantities[index], text),
+    );
+    const quantityError = resolvedQuantities.find((result) => result.error)?.error;
+    if (quantityError) return quantityError;
+    const cartQuantities = resolvedQuantities.map((result) => result.cartQty ?? 1);
+
     const addingMore = /\b(tambah|tambahkan|lagi)\b/.test(text);
     const actions: CommerceAction[] = explicitProducts.map((product, index) => {
       const existing = cart.find((item) => item.productId === product.id);
-      const qty = assignedQuantities[index];
+      const qty = cartQuantities[index];
       return existing && !addingMore
         ? { type: 'set', productId: product.id, qty }
         : { type: 'add', productId: product.id, qty };
@@ -189,7 +223,7 @@ export function respondToCustomer(
     const details = explicitProducts.map((product, index) => {
       const existing = cart.find((item) => item.productId === product.id);
       const verb = existing && !addingMore ? 'diubah menjadi' : 'ditambahkan';
-      return `${product.name} ${verb} ${formatQty(assignedQuantities[index])} ${product.unit}`;
+      return `${product.name} ${verb} ${formatQty(cartQuantities[index])} ${product.unit}`;
     });
 
     return {
@@ -324,10 +358,16 @@ export function respondToCustomer(
     const addingMore = /\b(tambah|tambahkan|lagi)\b/.test(text);
     const buying = /(mau|beli|pesan|ambil|tambah|masukkan)/.test(text) && !askingPrice && !askingAvailability;
     const contextualQuantityAnswer = explicitQuantity && !askingPrice && !askingAvailability;
+    const resolvedQuantity = resolveSaleQuantity(contextualProduct, qty, text);
+    if (resolvedQuantity.error) return resolvedQuantity.error;
+    const cartQty = resolvedQuantity.cartQty;
 
     if (askingPrice && explicitQuantity) {
+      const requestLabel = contextualProduct.packageSize && /\b(kg|kilo|kilogram)\b/.test(text)
+        ? `${formatQty(qty)} kg (${formatQty(cartQty)} ${contextualProduct.unit})`
+        : `${formatQty(cartQty)} ${contextualProduct.unit}`;
       return {
-        reply: `${formatQty(qty)} ${contextualProduct.unit} ${contextualProduct.name} harganya ${rupiah(contextualProduct.price * qty)}. Mau saya masukkan ke keranjang?`,
+        reply: `${requestLabel} ${contextualProduct.name} harganya ${rupiah(contextualProduct.price * cartQty)}. Mau saya masukkan ke keranjang?`,
         action: { type: 'none' },
         productIds: [contextualProduct.id],
       };
@@ -348,15 +388,15 @@ export function respondToCustomer(
       const existingItem = cart.find((item) => item.productId === contextualProduct.id);
       if (existingItem && explicitQuantity && !addingMore) {
         return {
-          reply: `Baik, jumlah ${contextualProduct.name} saya ubah dari ${formatQty(existingItem.qty)} menjadi ${formatQty(qty)} ${contextualProduct.unit}.`,
-          action: { type: 'set', productId: contextualProduct.id, qty },
+          reply: `Baik, jumlah ${contextualProduct.name} saya ubah dari ${formatQty(existingItem.qty)} menjadi ${formatQty(cartQty)} ${contextualProduct.unit}.`,
+          action: { type: 'set', productId: contextualProduct.id, qty: cartQty },
           productIds: [contextualProduct.id],
         };
       }
 
       return {
-        reply: `Siap, ${formatQty(qty)} ${contextualProduct.unit} ${contextualProduct.name} saya masukkan. Mau tambah yang lain atau lihat keranjang?`,
-        action: { type: 'add', productId: contextualProduct.id, qty },
+        reply: `Siap, ${formatQty(cartQty)} ${contextualProduct.unit} ${contextualProduct.name} saya masukkan. Mau tambah yang lain atau lihat keranjang?`,
+        action: { type: 'add', productId: contextualProduct.id, qty: cartQty },
         productIds: [contextualProduct.id],
       };
     }
