@@ -14,6 +14,7 @@ const NUMBER_WORDS: Record<string, number> = {
   sembilan: 9,
   sepuluh: 10,
   setengah: 0.5,
+  seperempat: 0.25,
 };
 
 export function normalizeText(input: string) {
@@ -23,8 +24,11 @@ export function normalizeText(input: string) {
     .replace(/[\u0300-\u036f]/g, '')
     .replace(/\b(sya|sy)\b/g, 'saya')
     .replace(/\b(ckup|cukub|cukuup)\b/g, 'cukup')
+    .replace(/\b(stengah|setngah|stngah)\b/g, 'setengah')
+    .replace(/\b(sprapat|seprapat|sepermpat)\b/g, 'seperempat')
     .replace(/\b(gireng|gorng)\b/g, 'goreng')
     .replace(/\b(ikam|ikn)\b/g, 'ikan')
+    .replace(/\b(aj|ja)\b/g, 'aja')
     .replace(/\b(pesen|psan)\b/g, 'pesan')
     .replace(/\b(pesnaan|psanan|pesaan)\b/g, 'pesanan')
     .replace(/\b(gk|ga|ngga|ngak)\b/g, 'tidak')
@@ -255,9 +259,20 @@ export function respondToCustomer(
   if (contextualProduct) {
     const askingPrice = /(harga|berapa|per kg|perkilo|sekilo)/.test(text);
     const askingAvailability = /(ada|tersedia|stok)/.test(text);
+    const explicitQuantity = /\b(\d+(?:[.,]\d+)?|satu|dua|tiga|empat|lima|enam|tujuh|delapan|sembilan|sepuluh|setengah|seperempat)\b/.test(text);
+    const addingMore = /\b(tambah|tambahkan|lagi)\b/.test(text);
     const buying = /(mau|beli|pesan|ambil|tambah|masukkan)/.test(text) && !askingPrice && !askingAvailability;
+    const contextualQuantityAnswer = explicitQuantity && !askingPrice && !askingAvailability;
 
-    if (buying || (/^(\d+|satu|dua|tiga|empat|lima)(\s|$)/.test(text) && lastMentionedProduct(history))) {
+    if (askingPrice && explicitQuantity) {
+      return {
+        reply: `${formatQty(qty)} ${contextualProduct.unit} ${contextualProduct.name} harganya ${rupiah(contextualProduct.price * qty)}. Mau saya masukkan ke keranjang?`,
+        action: { type: 'none' },
+        productIds: [contextualProduct.id],
+      };
+    }
+
+    if (buying || contextualQuantityAnswer) {
       if (contextualProduct.stock <= 0) {
         const alternatives = PRODUCTS.filter(
           (product) => product.category === contextualProduct.category && product.id !== contextualProduct.id && product.stock > 0,
@@ -268,6 +283,16 @@ export function respondToCustomer(
           productIds: alternatives.map((product) => product.id),
         };
       }
+
+      const existingItem = cart.find((item) => item.productId === contextualProduct.id);
+      if (existingItem && explicitQuantity && !addingMore) {
+        return {
+          reply: `Baik, jumlah ${contextualProduct.name} saya ubah dari ${formatQty(existingItem.qty)} menjadi ${formatQty(qty)} ${contextualProduct.unit}.`,
+          action: { type: 'set', productId: contextualProduct.id, qty },
+          productIds: [contextualProduct.id],
+        };
+      }
+
       return {
         reply: `Siap, ${formatQty(qty)} ${contextualProduct.unit} ${contextualProduct.name} saya masukkan. Mau tambah yang lain atau lihat keranjang?`,
         action: { type: 'add', productId: contextualProduct.id, qty },
