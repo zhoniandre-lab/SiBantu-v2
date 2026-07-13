@@ -3,6 +3,7 @@
 import { FormEvent, useEffect, useMemo, useRef, useState } from 'react';
 import { CATEGORIES, PRODUCTS, findProduct } from '@/lib/catalog';
 import { formatQty, makeId, rupiah } from '@/lib/format';
+import { STORE_CONFIG } from '@/lib/store-config';
 import type { CartItem, CategoryId, ChatMessage, ChatResponse, CommerceAction, Product } from '@/lib/types';
 
 type ViewMode = 'chat' | 'store';
@@ -283,7 +284,7 @@ export default function SiBantuApp() {
       const result = (await response.json()) as ChatResponse;
       setMessages((current) => [
         ...current,
-        { id: makeId('msg'), role: 'assistant', text: result.reply, productIds: result.productIds },
+        { id: makeId('msg'), role: 'assistant', text: result.reply, productIds: result.productIds, cta: result.cta },
       ]);
       if (result.actions?.length) result.actions.forEach(executeAction);
       else executeAction(result.action);
@@ -358,14 +359,14 @@ export default function SiBantuApp() {
           <span><strong>SiBantu</strong><small>Pasar yang bisa diajak ngobrol</small></span>
         </button>
         <div className="top-actions">
-          <button className="location-pill">📍 Jembatan Dua</button>
+          <button className="location-pill" title={STORE_CONFIG.pickupAddress}>📍 {STORE_CONFIG.pickupName}</button>
           <button className="cart-button" onClick={() => setCartOpen(true)}>🛒<b>{cartCount}</b></button>
         </div>
       </header>
 
       {view === 'chat' ? (
         <section className="chat-view">
-          <div className="service-strip"><span>● Toko buka</span><span>Antar 30–60 menit</span><span>COD tersedia</span></div>
+          <div className="service-strip"><span>● Toko buka</span><span>📍 Dari {STORE_CONFIG.pickupName}</span><span>Antar 30–60 menit</span><span>COD tersedia</span></div>
           <div className="chat-scroll">
             <div className="welcome-card">
               <div><small>ASISTEN BELANJA HARIAN</small><h1>Mau belanja apa hari ini?</h1><p>Ketik bebas seperti sedang berbicara dengan penjual pasar.</p></div>
@@ -384,6 +385,11 @@ export default function SiBantuApp() {
                   {message.role === 'assistant' && <div className="assistant-avatar">S</div>}
                   <div className="message-stack">
                     <div className="message-bubble">{message.text}</div>
+                    {message.cta && (
+                      <a className="chat-cta" href={message.cta.url} target="_blank" rel="noreferrer">
+                        <span>💬</span><b>{message.cta.label}</b><small>{STORE_CONFIG.adminPhoneDisplay}</small>
+                      </a>
+                    )}
                     {message.productIds?.length ? (
                       <div className="inline-products">
                         {message.productIds.map(findProduct).filter(Boolean).map((product) => (
@@ -528,6 +534,7 @@ export default function SiBantuApp() {
           <section className="checkout-panel">
             <div className="drawer-head"><div><small>CHECKOUT</small><h2>Alamat pengantaran</h2></div><button onClick={() => setCheckoutOpen(false)}>×</button></div>
             <div className="checkout-progress"><span className="active">1</span><i/><span>2</span><i/><span>3</span></div>
+            <div className="pickup-origin"><span>🏪</span><div><small>LOKASI ASAL PESANAN</small><b>{STORE_CONFIG.pickupAddress}</b></div></div>
             <div className="map-placeholder"><div className="map-roads"/><div className="map-pin">📍</div><div className="map-copy"><strong>Pin lokasi rumah</strong><span>{locationStatus}</span></div></div>
             <button className="gps-button" onClick={useLocation}>⌖ Gunakan lokasi saya sekarang</button>
             <div className="form-grid">
