@@ -27,6 +27,7 @@ export function normalizeText(input: string) {
     .replace(/\b(ckup|cukub|cukuup)\b/g, 'cukup')
     .replace(/\b(stengah|setngah|stngah)\b/g, 'setengah')
     .replace(/\b(sprapat|seprapat|sepermpat)\b/g, 'seperempat')
+    .replace(/\b(rbu|ribu2|reb[u])\b/g, 'ribu')
     .replace(/\b(gireng|gorng)\b/g, 'goreng')
     .replace(/\b(ikam|ikn)\b/g, 'ikan')
     .replace(/\b(aj|ja)\b/g, 'aja')
@@ -97,9 +98,31 @@ function readAllQuantities(text: string) {
   });
 }
 
+function readBudget(text: string) {
+  const thousand = text.match(/(?:rp\s*)?(\d+(?:[.,]\d+)?)\s*(ribu|rb|k)\b/);
+  if (thousand) return Math.round(Number(thousand[1].replace(',', '.')) * 1000);
+
+  const full = text.match(/(?:rp\s*)?(\d{4,9})\b/);
+  if (full) return Number(full[1]);
+  return undefined;
+}
+
+function readPeopleCount(text: string) {
+  const numberPattern = Object.keys(NUMBER_WORDS).join('|');
+  const before = text.match(new RegExp(`\\b(\\d+|${numberPattern})\\s*(?:orang|porsi)\\b`));
+  const after = text.match(new RegExp(`\\b(?:orang|porsi)\\s*(\\d+|${numberPattern})\\b`));
+  const raw = before?.[1] ?? after?.[1];
+  if (!raw) return undefined;
+  return NUMBER_WORDS[raw] ?? Number(raw);
+}
+
 function productTextPosition(text: string, product: Product) {
   const candidates = [product.name.toLowerCase(), ...product.aliases.map((alias) => alias.toLowerCase())];
-  const positions = candidates.map((candidate) => text.indexOf(candidate)).filter((position) => position >= 0);
+  const positions = candidates.map((candidate) => {
+    const escaped = candidate.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const match = new RegExp(`(^|\\s)${escaped}(?:nya)?(?=\\s|$|[,.])`).exec(text);
+    return match ? match.index + match[1].length : -1;
+  }).filter((position) => position >= 0);
   return positions.length ? Math.min(...positions) : Number.MAX_SAFE_INTEGER;
 }
 
@@ -145,6 +168,45 @@ function resolveSaleQuantity(product: Product, requestedQty: number, text: strin
   return { cartQty: Math.round(packageCount) };
 }
 
+function budgetRecommendation(budget: number, people: number, preference?: 'ikan' | 'ayam' | 'sayur'): ChatResponse {
+  const bundles = [
+    { name: 'ayam kecap + tumis kangkung', items: [{ id: 20, qty: 0.5 }, { id: 54, qty: 1 }, { id: 51, qty: 0.25 }, { id: 4, qty: 1 }] },
+    { name: 'lele goreng + sayur segar', items: [{ id: 11, qty: 0.5 }, { id: 2, qty: 1 }, { id: 1, qty: 1 }, { id: 50, qty: 0.1 }, { id: 51, qty: 0.25 }] },
+    { name: 'ikan nila sambal + sayur bayam', items: [{ id: 10, qty: 1 }, { id: 50, qty: 0.1 }, { id: 51, qty: 0.25 }, { id: 2, qty: 1 }] },
+    { name: 'telur dan sayur hemat', items: [{ id: 22, qty: 0.5 }, { id: 2, qty: 1 }, { id: 1, qty: 1 }] },
+  ].map((bundle) => ({
+    ...bundle,
+    total: bundle.items.reduce((sum, item) => sum + (findProduct(item.id)?.price ?? 0) * item.qty, 0),
+  }));
+
+  const preferredBundles = preference
+    ? bundles.filter((bundle) =>
+        preference === 'ikan'
+          ? /(ikan|lele)/.test(bundle.name)
+          : preference === 'ayam'
+            ? /ayam/.test(bundle.name)
+            : /(sayur|telur)/.test(bundle.name),
+      )
+    : bundles;
+  const selected = preferredBundles.filter((bundle) => bundle.total <= budget).sort((a, b) => b.total - a.total)[0]
+    ?? bundles.filter((bundle) => bundle.total <= budget).sort((a, b) => b.total - a.total)[0];
+  if (!selected) {
+    return {
+      reply: `Dengan budget ${rupiah(budget)}, pilihannya masih terbatas untuk ${formatQty(people)} orang. Saya bisa mulai dari telur dan satu jenis sayur, atau Kakak bisa menaikkan budget sedikit. Mau yang paling hemat?`,
+      action: { type: 'none' },
+      productIds: [22, 2, 1],
+      suggestions: ['Pilih yang paling hemat', 'Naikkan budget', 'Lihat semua menu'],
+    };
+  }
+
+  return {
+    reply: `Untuk ${formatQty(people)} orang dengan budget ${rupiah(budget)}, pilihan yang paling pas adalah ${selected.name} sekitar ${rupiah(selected.total)}. Masih ada sisa sekitar ${rupiah(Math.max(0, budget - selected.total))}. Mau saya siapkan paket ini?`,
+    action: { type: 'none' },
+    productIds: selected.items.slice(0, 4).map((item) => item.id),
+    suggestions: ['Siapkan paket ini', 'Cari paket lain', 'Ubah budget'],
+  };
+}
+
 function recipeRecommendation(people: number): ChatResponse {
   return {
     reply: `Untuk ${formatQty(people)} orang, saya punya dua ide: ayam kecap dengan tumis kangkung, atau ikan nila sambal dengan sayur bayam. Bahannya tersedia di toko. Kakak lebih ingin menu ayam atau ikan?`,
@@ -177,10 +239,18 @@ export function respondToCustomer(
   const previousHistory = history.length && normalizeText(history[history.length - 1]?.text ?? '') === text
     ? history.slice(0, -1)
     : history;
-  const recentContext = previousHistory.slice(-8).map((message) => normalizeText(message.text)).join(' | ');
+  const recentMessages = previousHistory.slice(-8).map((message) => normalizeText(message.text));
+  const recentContext = recentMessages.join(' | ');
   const recipeInContext = /(masak apa|makan apa|menu apa|rekomendasi masak|pilihkan menu|jumlah orang)/.test(recentContext);
+  const budgetInContext = /(budget|anggaran|dana|belanja pintar)/.test(recentContext);
   const asksRecipeNow = /(masak apa|makan apa|menu apa|rekomendasi.*masak|pilihkan.*menu|enaknya masak)/.test(text);
-  const statesPeopleNow = /\b(orang|porsi)\b/.test(text) && /\b(\d+|satu|dua|tiga|empat|lima|enam|tujuh|delapan|sembilan|sepuluh)\b/.test(text);
+  const asksBudgetNow = /(budget|anggaran|dana|belanja pintar)/.test(text);
+  const budgetNow = readBudget(text);
+  const previousBudget = [...recentMessages].reverse().map(readBudget).find((value) => value !== undefined);
+  const peopleNow = readPeopleCount(text);
+  const previousPeople = [...recentMessages].reverse().map(readPeopleCount).find((value) => value !== undefined);
+  const preferenceNow = /\bikan\b/.test(text) ? 'ikan' : /\bayam\b/.test(text) ? 'ayam' : /\bsayur\b/.test(text) ? 'sayur' : undefined;
+  const statesPeopleNow = peopleNow !== undefined;
 
   if (!text) return { reply: 'Tulis kebutuhan Kakak, ya.', action: { type: 'none' } };
 
@@ -192,8 +262,30 @@ export function respondToCustomer(
     };
   }
 
+  if (asksBudgetNow && !budgetNow) {
+    return {
+      reply: 'Siap, Kak. Berapa budget belanja hari ini? Setelah itu beri tahu untuk berapa orang supaya saya pilihkan barang yang pas.',
+      action: { type: 'none' },
+      suggestions: ['Budget 50 ribu', 'Budget 100 ribu', 'Budget 150 ribu'],
+    };
+  }
+
+  if (budgetNow && (asksBudgetNow || budgetInContext)) {
+    const people = peopleNow ?? previousPeople;
+    if (people) return budgetRecommendation(budgetNow, people, preferenceNow);
+    return {
+      reply: `Baik, budgetnya ${rupiah(budgetNow)}. Belanja ini untuk berapa orang? Biar jumlah dan menunya tidak kurang atau berlebihan.`,
+      action: { type: 'none' },
+      suggestions: ['Untuk 2 orang', 'Untuk 3 orang', 'Untuk 4 orang'],
+    };
+  }
+
+  if (statesPeopleNow && previousBudget) {
+    return budgetRecommendation(previousBudget, peopleNow!, preferenceNow);
+  }
+
   if ((asksRecipeNow && statesPeopleNow) || (recipeInContext && statesPeopleNow)) {
-    return recipeRecommendation(qty);
+    return recipeRecommendation(peopleNow ?? qty);
   }
 
   if (asksRecipeNow) {
