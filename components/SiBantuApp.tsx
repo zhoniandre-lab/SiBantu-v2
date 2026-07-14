@@ -3,10 +3,12 @@
 import { FormEvent, useEffect, useMemo, useRef, useState } from 'react';
 import { CATEGORIES, PRODUCTS, findProduct } from '@/lib/catalog';
 import { formatQty, makeId, rupiah } from '@/lib/format';
-import { STORE_CONFIG } from '@/lib/store-config';
+import { adminWhatsAppUrl, STORE_CONFIG } from '@/lib/store-config';
 import type { CartItem, CategoryId, ChatMessage, ChatResponse, CommerceAction, Product } from '@/lib/types';
 
 type ViewMode = 'chat' | 'store';
+type GuideMode = 'start' | 'budget' | 'recipe' | 'list';
+type FoodPreference = 'ikan' | 'ayam' | 'sayur';
 
 type CheckoutData = {
   name: string;
@@ -106,6 +108,13 @@ export default function SiBantuApp() {
   const [checkoutOpen, setCheckoutOpen] = useState(false);
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
   const [pickerQty, setPickerQty] = useState(1);
+  const [pickerNote, setPickerNote] = useState('');
+  const [guideOpen, setGuideOpen] = useState(false);
+  const [guideMode, setGuideMode] = useState<GuideMode>('start');
+  const [guideBudget, setGuideBudget] = useState(50000);
+  const [guidePeople, setGuidePeople] = useState(3);
+  const [guidePreference, setGuidePreference] = useState<FoodPreference>('ikan');
+  const [guideList, setGuideList] = useState('');
   const [locationStatus, setLocationStatus] = useState('Lokasi belum dipilih');
   const [toast, setToast] = useState<{ id: number; text: string } | null>(null);
   const [checkout, setCheckout] = useState<CheckoutData>({ name: '', whatsapp: '', address: '', landmark: '' });
@@ -162,21 +171,22 @@ export default function SiBantuApp() {
   function openProductPicker(product: Product) {
     setSelectedProduct(product);
     setPickerQty(product.quickQuantities?.[0] ?? product.step ?? 1);
+    setPickerNote('');
   }
 
   function confirmProductPicker() {
     if (!selectedProduct) return;
-    addToCart(selectedProduct.id, pickerQty);
+    addToCart(selectedProduct.id, pickerQty, pickerNote || undefined);
     setSelectedProduct(null);
   }
 
-  function addToCart(productId: number, qty = 1) {
+  function addToCart(productId: number, qty = 1, note?: string) {
     const product = findProduct(productId);
     if (product) showCartToast(product.name, qty, product.unit);
     setCart((current) => {
       const existing = current.find((item) => item.productId === productId);
-      if (existing) return current.map((item) => (item.productId === productId ? { ...item, qty: item.qty + qty } : item));
-      return [...current, { productId, qty }];
+      if (existing) return current.map((item) => (item.productId === productId ? { ...item, qty: item.qty + qty, note: note ?? item.note } : item));
+      return [...current, { productId, qty, note }];
     });
   }
 
@@ -335,6 +345,26 @@ export default function SiBantuApp() {
     setView('chat');
   }
 
+  function openGuide(mode: GuideMode = 'start') {
+    setGuideMode(mode);
+    setGuideOpen(true);
+  }
+
+  function submitGuide() {
+    let text = '';
+    if (guideMode === 'budget') {
+      text = `Budget saya ${guideBudget / 1000} ribu untuk ${guidePeople} orang, pilihkan menu ${guidePreference}`;
+    } else if (guideMode === 'recipe') {
+      text = `Pilihkan resep menu ${guidePreference} untuk ${guidePeople} orang dari bahan yang tersedia`;
+    } else if (guideMode === 'list') {
+      text = guideList.trim();
+    }
+    if (!text) return;
+    setGuideOpen(false);
+    setView('chat');
+    void submitText(text);
+  }
+
   function useLocation() {
     if (!navigator.geolocation) {
       setLocationStatus('GPS tidak tersedia di perangkat ini');
@@ -426,7 +456,7 @@ export default function SiBantuApp() {
             <div className="footer-shortcuts">
               <button onClick={() => setView('store')}>▦ Semua Menu</button>
               <button onClick={() => setCartOpen(true)}>🛒 Keranjang {cartCount ? `(${cartCount})` : ''}</button>
-              <button onClick={() => setInput('Carikan belanja sesuai budget saya')}>✨ Belanja Pintar</button>
+              <button onClick={() => openGuide('start')}>✨ Belanja Pintar</button>
             </div>
             <form className="composer" onSubmit={sendMessage}>
               <button
@@ -493,6 +523,49 @@ export default function SiBantuApp() {
         </div>
       )}
 
+      {guideOpen && (
+        <div className="overlay guide-overlay" onMouseDown={(event) => event.target === event.currentTarget && setGuideOpen(false)}>
+          <section className="guided-assistant">
+            <div className="guide-head">
+              <div><small>ASISTEN BELANJA</small><h2>Belanja seperti ngobrol di pasar</h2></div>
+              <button onClick={() => setGuideOpen(false)}>×</button>
+            </div>
+
+            {guideMode === 'start' && (
+              <div className="guide-menu">
+                <button onClick={() => setGuideMode('budget')}><span>💰</span><div><b>Belanja sesuai budget</b><small>SiBantu pilihkan paket yang cukup</small></div><i>→</i></button>
+                <button onClick={() => setGuideMode('recipe')}><span>🍲</span><div><b>Cari bahan masakan</b><small>Pilih menu dan jumlah orang</small></div><i>→</i></button>
+                <button onClick={() => setGuideMode('list')}><span>📝</span><div><b>Titip daftar belanja</b><small>Tulis bebas beberapa barang sekaligus</small></div><i>→</i></button>
+                <button onClick={() => { setGuideOpen(false); setView('store'); }}><span>🛍️</span><div><b>Lihat semua menu</b><small>Cari dan pilih dari katalog</small></div><i>→</i></button>
+                <a href={adminWhatsAppUrl('Halo Admin SiBantu, saya ingin dibantu belanja.')} target="_blank" rel="noreferrer"><span>💬</span><div><b>Ngobrol dengan pedagang</b><small>{STORE_CONFIG.adminPhoneDisplay}</small></div><i>→</i></a>
+              </div>
+            )}
+
+            {(guideMode === 'budget' || guideMode === 'recipe') && (
+              <div className="guide-form">
+                <button className="guide-back" onClick={() => setGuideMode('start')}>← Kembali</button>
+                {guideMode === 'budget' && <><label>Budget belanja</label><div className="guide-options">{[50000,100000,150000].map((value) => <button className={guideBudget === value ? 'active' : ''} key={value} onClick={() => setGuideBudget(value)}>{rupiah(value)}</button>)}</div></>}
+                <label>Untuk berapa orang?</label>
+                <div className="guide-options">{[2,3,4,5].map((value) => <button className={guidePeople === value ? 'active' : ''} key={value} onClick={() => setGuidePeople(value)}>{value} orang</button>)}</div>
+                <label>Lebih ingin menu apa?</label>
+                <div className="guide-options food">{(['ikan','ayam','sayur'] as FoodPreference[]).map((value) => <button className={guidePreference === value ? 'active' : ''} key={value} onClick={() => setGuidePreference(value)}>{value === 'ikan' ? '🐟 Ikan' : value === 'ayam' ? '🍗 Ayam' : '🥬 Sayur'}</button>)}</div>
+                <button className="guide-submit" onClick={submitGuide}>✨ Minta SiBantu pilihkan</button>
+              </div>
+            )}
+
+            {guideMode === 'list' && (
+              <div className="guide-form">
+                <button className="guide-back" onClick={() => setGuideMode('start')}>← Kembali</button>
+                <label>Tulis daftar belanja</label>
+                <textarea value={guideList} onChange={(event) => setGuideList(event.target.value)} placeholder="Contoh: ikan nila 1 kg, bayam 2 ikat, minyak 1 liter" />
+                <small>SiBantu akan memisahkan barang dan jumlahnya sebelum masuk keranjang.</small>
+                <button className="guide-submit" disabled={!guideList.trim()} onClick={submitGuide}>Kirim daftar ke SiBantu →</button>
+              </div>
+            )}
+          </section>
+        </div>
+      )}
+
       {selectedProduct && (
         <div className="overlay product-picker-overlay" onMouseDown={(event) => event.target === event.currentTarget && setSelectedProduct(null)}>
           <section className="product-picker">
@@ -510,6 +583,16 @@ export default function SiBantuApp() {
                 </button>
               ))}
             </div>
+            {selectedProduct.serviceOptions?.length ? (
+              <div className="service-options">
+                <div className="picker-label"><b>Permintaan khusus</b><span>Opsional</span></div>
+                <div>
+                  {selectedProduct.serviceOptions.map((option) => (
+                    <button className={pickerNote === option ? 'active' : ''} key={option} onClick={() => setPickerNote(option)}>{option}</button>
+                  ))}
+                </div>
+              </div>
+            ) : null}
             <div className="picker-stepper">
               <button onClick={() => setPickerQty((current) => Math.max(selectedProduct.step ?? 1, current - (selectedProduct.step ?? 1)))}>−</button>
               <div><strong>{formatQty(pickerQty)}</strong><span>{selectedProduct.unit}</span></div>
@@ -518,6 +601,14 @@ export default function SiBantuApp() {
             <button className="picker-confirm" onClick={confirmProductPicker}>
               <span>Masukkan ke keranjang</span><strong>{rupiah(selectedProduct.price * pickerQty)}</strong>
             </button>
+            <a
+              className="ask-seller"
+              href={adminWhatsAppUrl(`Halo Admin SiBantu, saya ingin bertanya tentang ${selectedProduct.name}.`)}
+              target="_blank"
+              rel="noreferrer"
+            >
+              💬 Tanya pedagang tentang produk ini
+            </a>
           </section>
         </div>
       )}
@@ -532,7 +623,7 @@ export default function SiBantuApp() {
                 const product = findProduct(item.productId);
                 if (!product) return null;
                 const step = product.step ?? 1;
-                return <div className="cart-line" key={item.productId}><div className="cart-emoji">{product.emoji}</div><div className="cart-info"><h3>{product.name}</h3><span>{rupiah(product.price)} / {product.unit}</span><button onClick={() => setCartQty(product.id, 0)}>Hapus</button></div><div className="stepper"><button onClick={() => setCartQty(product.id, item.qty - step)}>−</button><b>{formatQty(item.qty)}<small>{product.unit}</small></b><button onClick={() => setCartQty(product.id, item.qty + step)}>+</button></div></div>;
+                return <div className="cart-line" key={item.productId}><div className="cart-emoji">{product.emoji}</div><div className="cart-info"><h3>{product.name}</h3><span>{rupiah(product.price)} / {product.unit}</span>{item.note && <small className="item-note">📝 {item.note}</small>}<button onClick={() => setCartQty(product.id, 0)}>Hapus</button></div><div className="stepper"><button onClick={() => setCartQty(product.id, item.qty - step)}>−</button><b>{formatQty(item.qty)}<small>{product.unit}</small></b><button onClick={() => setCartQty(product.id, item.qty + step)}>+</button></div></div>;
               })}
             </div>
             {cart.length > 0 && <div className="drawer-total"><div><span>Subtotal</span><strong>{rupiah(subtotal)}</strong></div><small>Ongkir dihitung setelah memilih lokasi.</small><button onClick={() => { setCartOpen(false); setCheckoutOpen(true); }}>Lanjut pilih lokasi</button></div>}
