@@ -25,8 +25,6 @@ function detectIntent(text: string, state: ConversationState, productCount: numb
   if (/(semua menu|lihat menu|buka toko|katalog)/.test(text)) return 'show_store';
   if (/(ubah|ganti|koreksi|edit)/.test(text) && /(pesanan|belanjaan|keranjang)/.test(text)) return 'show_cart';
   if (/(keranjang|belanjaan saya)/.test(text) && !/(tambah|masukkan)/.test(text)) return 'show_cart';
-  if (/(total|hitung|berapa semua|jumlah belanja)/.test(text)) return 'show_total';
-  if (/(cukup|selesai|checkout|bayar sekarang)/.test(text)) return 'checkout';
   if (/(masak apa|makan apa|menu apa|resep|pilihkan menu|enaknya masak)/.test(text)) return 'start_recipe';
   if (/(budget|anggaran|dana|modal|uang saya|atur uang|belanja pintar)/.test(text) || (parseBudget(text) && /(dapat apa|bisa dapat|pilihkan|atur)/.test(text))) return 'start_budget';
   if (/(tanya pedagang|tanya admin|hubungi admin|hubungi pedagang|chat admin|wa admin)/.test(text)) return 'ask_seller';
@@ -35,6 +33,8 @@ function detectIntent(text: string, state: ConversationState, productCount: numb
   if (/(harga|berapa harganya|berapa per)/.test(text) && productCount) return 'ask_price';
   if (/(ada|tersedia|stok)/.test(text) && productCount) return 'ask_availability';
   if ((/(mau|beli|pesan|ambil|tambah|masukkan)/.test(text) || parseNumbers(text).length) && productCount) return 'add_items';
+  if (/(total|hitung|berapa semua|jumlah belanja)/.test(text)) return 'show_total';
+  if (/(cukup|selesai|checkout|bayar sekarang)/.test(text)) return 'checkout';
   if (state.pending !== 'none') return 'answer_slot';
   if (/(mau|ingin|pengen).*(pesan|belanja|beli)/.test(text)) return 'start_shopping';
   if (cart.length && /\b(lanjut)\b/.test(text)) return 'show_cart';
