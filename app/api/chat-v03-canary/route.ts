@@ -1,7 +1,8 @@
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { runAIAdapter } from '@/lib/chat-v03/ai-adapter';
 import { shouldUseCanary } from '@/lib/chat-v03/canary';
 import { runChatEngine } from '@/lib/chat-v03/engine';
+import { verifyOptInToken } from '@/lib/chat-v03/opt-in';
 import { signConversationState, verifyConversationState } from '@/lib/chat-v03/state-token';
 import { createTelemetryEvent, logTelemetry } from '@/lib/chat-v03/telemetry';
 import type { CartItem } from '@/lib/types';
@@ -20,7 +21,7 @@ export async function GET() {
   });
 }
 
-export async function POST(request: Request) {
+export async function POST(request: NextRequest) {
   const startedAt = performance.now();
   try {
     const body = (await request.json()) as {
@@ -33,7 +34,8 @@ export async function POST(request: Request) {
     if (!sessionId) return NextResponse.json({ error: 'Session ID wajib diisi.' }, { status: 400 });
 
     const percentage = configuredPercentage();
-    if (!shouldUseCanary(sessionId, percentage)) {
+    const forceV03 = verifyOptInToken(request.cookies.get('sibantu_v03_force')?.value);
+    if (!forceV03 && !shouldUseCanary(sessionId, percentage)) {
       return NextResponse.json({ useLegacy: true, version: 'legacy', percentage }, { status: 409 });
     }
 
@@ -59,6 +61,7 @@ export async function POST(request: Request) {
       stateToken: signConversationState(finalResult.state),
       version: '0.3.0',
       canary: true,
+      forcedOptIn: forceV03,
       percentage,
       aiStatus,
       modelUsed: aiResult?.modelUsed,
