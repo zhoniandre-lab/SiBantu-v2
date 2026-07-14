@@ -52,7 +52,7 @@ export async function requestChatWithCanary(payload: ChatClientPayload): Promise
   const result = (await canaryResponse.json()) as ChatClientResult;
   sessionStorage.setItem(assignmentKey(payload.sessionId), 'v03');
   if (result.stateToken) sessionStorage.setItem(tokenKey(payload.sessionId), result.stateToken);
-  return { ...result, engine: 'v03' };
+  return { ...result, action: result.action ?? { type: 'none' }, engine: 'v03' };
 }
 
 export function resetChatAssignment(sessionId: string) {
