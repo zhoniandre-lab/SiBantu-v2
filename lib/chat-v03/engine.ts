@@ -40,9 +40,18 @@ export function runChatEngine(input: EngineInput): EngineOutput {
   }
 
   if (parsed.intent === 'show_store') return output('Siap, saya buka semua produk yang tersedia hari ini.', state, { actions: [{ type: 'open_store' }] });
-  if (parsed.intent === 'show_cart') return output(cart.length ? 'Tentu. Saya buka keranjang; jumlah bisa ditambah, dikurangi, atau dihapus.' : 'Keranjang masih kosong. Saya buka semua menu dulu, ya.', state, { actions: [cart.length ? { type: 'show_cart' } : { type: 'open_store' }] });
-  if (parsed.intent === 'show_total') return output(cart.length ? 'Siap, saya buka keranjang dan hitung subtotalnya.' : 'Keranjang masih kosong, jadi belum ada total yang dihitung.', state, { actions: cart.length ? [{ type: 'show_cart' }] : [] });
-  if (parsed.intent === 'checkout') return output(cart.length ? 'Baik, kita lanjut ke alamat pengantaran.' : 'Keranjang masih kosong. Pilih barang terlebih dahulu, ya.', state, { actions: cart.length ? [{ type: 'checkout' }] : [{ type: 'open_store' }] });
+  if (parsed.intent === 'show_cart') {
+    state.pending = 'none';
+    return output(cart.length ? 'Tentu. Saya buka keranjang; jumlah bisa ditambah, dikurangi, atau dihapus.' : 'Keranjang masih kosong. Saya buka semua menu dulu, ya.', state, { actions: [cart.length ? { type: 'show_cart' } : { type: 'open_store' }] });
+  }
+  if (parsed.intent === 'show_total') {
+    state.pending = 'none';
+    return output(cart.length ? 'Siap, saya buka keranjang dan hitung subtotalnya.' : 'Keranjang masih kosong, jadi belum ada total yang dihitung.', state, { actions: cart.length ? [{ type: 'show_cart' }] : [] });
+  }
+  if (parsed.intent === 'checkout') {
+    state.pending = 'none';
+    return output(cart.length ? 'Baik, kita lanjut ke alamat pengantaran.' : 'Keranjang masih kosong. Pilih barang terlebih dahulu, ya.', state, { actions: cart.length ? [{ type: 'checkout' }] : [{ type: 'open_store' }] });
+  }
 
   if (parsed.intent === 'start_budget') {
     state.topic = 'budget';
@@ -120,9 +129,13 @@ export function runChatEngine(input: EngineInput): EngineOutput {
     const actions: CommerceAction[] = products.map((product, index) => parsed.intent === 'remove_items' ? { type: 'remove', productId: product.id } : parsed.intent === 'update_items' ? { type: 'set', productId: product.id, qty: assigned[index] } : { type: 'add', productId: product.id, qty: assigned[index] });
     const wantsTotal = /(total|hitung|berapa semua|jumlah belanja)/.test(parsed.normalized);
     if (wantsTotal) actions.push({ type: 'show_cart' });
-    state.pending = 'none';
-    const suffix = wantsTotal ? ' Saya buka keranjang untuk menghitung totalnya.' : '';
-    return output(`Siap, ${products.map((product, index) => parsed.intent === 'remove_items' ? `${product.name} dihapus` : `${product.name} ${formatQty(assigned[index])} ${product.unit}`).join(' dan ')} sudah diproses.${suffix}`, state, { actions, productIds: products.map((product) => product.id) });
+    state.pending = wantsTotal ? 'none' : 'confirmation';
+    const suffix = wantsTotal ? ' Saya buka keranjang untuk menghitung totalnya.' : ' Mau lihat keranjang, tambah lagi, atau lanjut checkout?';
+    return output(`Siap, ${products.map((product, index) => parsed.intent === 'remove_items' ? `${product.name} dihapus` : `${product.name} ${formatQty(assigned[index])} ${product.unit}`).join(' dan ')} sudah diproses.${suffix}`, state, {
+      actions,
+      productIds: products.map((product) => product.id),
+      suggestions: wantsTotal ? [] : ['Lihat keranjang', 'Tambah lagi', 'Lanjut checkout'],
+    });
   }
 
   if (parsed.intent === 'ask_seller') return output(`Saya bantu hubungkan ke pedagang di ${STORE_CONFIG.pickupName}.`, state, { handoff: { reason: 'customer_request', message: 'Pelanggan ingin berbicara dengan pedagang.' } });
