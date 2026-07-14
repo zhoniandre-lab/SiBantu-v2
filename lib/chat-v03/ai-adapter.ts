@@ -35,7 +35,8 @@ export function validateAIProposal(value: AIProposal | null, modelUsed: string):
   const reply = String(value.reply ?? '').trim();
   const tool = String(value.tool ?? 'clarify');
   const leaked = /system prompt|KATALOG|ATURAN|JSON|tool schema/i.test(reply);
-  if (!reply || reply.length > 500 || leaked) return null;
+  const inventedCommerceFact = /rp\s*[\d.]|total\s*(belanja)?|diskon\s*\d|ongkir\s*\d/i.test(reply);
+  if (!reply || reply.length > 500 || leaked || inventedCommerceFact) return null;
 
   const productIds = Array.isArray(value.productIds)
     ? [...new Set(value.productIds.map(Number))].filter((id) => PRODUCTS.some((product) => product.id === id)).slice(0, 4)
