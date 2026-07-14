@@ -7,6 +7,8 @@ export function normalizeText(input: string) {
     .normalize('NFD')
     .replace(/[\u0300-\u036f]/g, '')
     .replace(/[^a-z0-9.,\s]/g, ' ')
+    .replace(/([a-z])(\d)/g, '$1 $2')
+    .replace(/(\d)([a-z])/g, '$1 $2')
     .replace(/\s+/g, ' ')
     .trim();
 
@@ -27,6 +29,8 @@ export function parseNumbers(input: string) {
 
 export function parseBudget(input: string) {
   const text = normalizeText(input);
+  const formatted = text.match(/(?:rp\s*)?(\d{1,3}(?:[.]\d{3})+)\b/);
+  if (formatted) return Number(formatted[1].replaceAll('.', ''));
   const short = text.match(/(?:rp\s*)?(\d+(?:[.,]\d+)?)\s*(ribu|rb|k)\b/);
   if (short) return Math.round(Number(short[1].replace(',', '.')) * 1000);
   const full = text.match(/(?:rp\s*)?(\d{4,9})\b/);
