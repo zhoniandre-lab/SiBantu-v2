@@ -35,6 +35,7 @@ function detectIntent(text: string, state: ConversationState, productCount: numb
   if ((/(mau|beli|pesan|ambil|tambah|masukkan)/.test(text) || parseNumbers(text).length) && productCount) return 'add_items';
   if (/(total|hitung|berapa semua|jumlah belanja)/.test(text)) return 'show_total';
   if (/(cukup|selesai|checkout|bayar sekarang)/.test(text)) return 'checkout';
+  if (cart.length && (/\b(oke|ok|sip|iya|ya)\b.*\b(proses|diproses|proseskan|lanjut|jadi|hitung)\b/.test(text) || /^(oke|ok|sip|iya|ya)$/.test(text))) return 'show_cart';
   if (state.pending !== 'none') return 'answer_slot';
   if (/(mau|ingin|pengen).*(pesan|belanja|beli)/.test(text)) return 'start_shopping';
   if (cart.length && /\b(lanjut)\b/.test(text)) return 'show_cart';
