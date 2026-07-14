@@ -3,8 +3,9 @@
 import { FormEvent, useEffect, useMemo, useRef, useState } from 'react';
 import { CATEGORIES, PRODUCTS, findProduct } from '@/lib/catalog';
 import { formatQty, makeId, rupiah } from '@/lib/format';
+import { requestChatWithCanary } from '@/lib/chat-v03/client';
 import { adminWhatsAppUrl, STORE_CONFIG } from '@/lib/store-config';
-import type { CartItem, CategoryId, ChatMessage, ChatResponse, CommerceAction, Product } from '@/lib/types';
+import type { CartItem, CategoryId, ChatMessage, CommerceAction, Product } from '@/lib/types';
 
 type ViewMode = 'chat' | 'store';
 type GuideMode = 'start' | 'budget' | 'recipe' | 'list';
@@ -284,13 +285,12 @@ export default function SiBantuApp() {
     setLoading(true);
 
     try {
-      const response = await fetch('/api/chat', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ message: text, cart, history: updatedHistory, sessionId }),
+      const result = await requestChatWithCanary({
+        message: text,
+        cart,
+        history: updatedHistory,
+        sessionId,
       });
-      if (!response.ok) throw new Error('Chat tidak tersedia');
-      const result = (await response.json()) as ChatResponse;
       setMessages((current) => [
         ...current,
         { id: makeId('msg'), role: 'assistant', text: result.reply, productIds: result.productIds, cta: result.cta, suggestions: result.suggestions },
