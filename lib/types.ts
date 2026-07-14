@@ -23,11 +23,13 @@ export type Product = {
   baseUnit?: string;
   packageSize?: number;
   allowPartial?: boolean;
+  serviceOptions?: string[];
 };
 
 export type CartItem = {
   productId: number;
   qty: number;
+  note?: string;
 };
 
 export type ChatMessage = {
