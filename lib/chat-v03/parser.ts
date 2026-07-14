@@ -28,7 +28,7 @@ function detectIntent(text: string, state: ConversationState, productCount: numb
   if (/(total|hitung|berapa semua|jumlah belanja)/.test(text)) return 'show_total';
   if (/(cukup|selesai|checkout|bayar sekarang)/.test(text)) return 'checkout';
   if (/(masak apa|makan apa|menu apa|resep|pilihkan menu|enaknya masak)/.test(text)) return 'start_recipe';
-  if (/(budget|anggaran|dana|belanja pintar)/.test(text)) return 'start_budget';
+  if (/(budget|anggaran|dana|modal|uang saya|atur uang|belanja pintar)/.test(text) || (parseBudget(text) && /(dapat apa|bisa dapat|pilihkan|atur)/.test(text))) return 'start_budget';
   if (/(tanya pedagang|tanya admin|hubungi admin|hubungi pedagang|chat admin|wa admin)/.test(text)) return 'ask_seller';
   if (/(hapus|batal|tidak jadi)/.test(text) && productCount) return 'remove_items';
   if (/(ubah|ganti|jadi|kurangi)/.test(text) && productCount) return 'update_items';
