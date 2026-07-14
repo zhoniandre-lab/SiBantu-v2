@@ -118,8 +118,11 @@ export function runChatEngine(input: EngineInput): EngineOutput {
     }
     const assigned = quantities.length === 1 ? products.map(() => quantities[0]) : quantities;
     const actions: CommerceAction[] = products.map((product, index) => parsed.intent === 'remove_items' ? { type: 'remove', productId: product.id } : parsed.intent === 'update_items' ? { type: 'set', productId: product.id, qty: assigned[index] } : { type: 'add', productId: product.id, qty: assigned[index] });
+    const wantsTotal = /(total|hitung|berapa semua|jumlah belanja)/.test(parsed.normalized);
+    if (wantsTotal) actions.push({ type: 'show_cart' });
     state.pending = 'none';
-    return output(`Siap, ${products.map((product, index) => parsed.intent === 'remove_items' ? `${product.name} dihapus` : `${product.name} ${formatQty(assigned[index])} ${product.unit}`).join(' dan ')} sudah diproses.`, state, { actions, productIds: products.map((product) => product.id) });
+    const suffix = wantsTotal ? ' Saya buka keranjang untuk menghitung totalnya.' : '';
+    return output(`Siap, ${products.map((product, index) => parsed.intent === 'remove_items' ? `${product.name} dihapus` : `${product.name} ${formatQty(assigned[index])} ${product.unit}`).join(' dan ')} sudah diproses.${suffix}`, state, { actions, productIds: products.map((product) => product.id) });
   }
 
   if (parsed.intent === 'ask_seller') return output(`Saya bantu hubungkan ke pedagang di ${STORE_CONFIG.pickupName}.`, state, { handoff: { reason: 'customer_request', message: 'Pelanggan ingin berbicara dengan pedagang.' } });
