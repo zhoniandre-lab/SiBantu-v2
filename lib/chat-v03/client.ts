@@ -30,7 +30,8 @@ async function legacyRequest(payload: ChatClientPayload): Promise<ChatClientResu
 
 export async function requestChatWithCanary(payload: ChatClientPayload): Promise<ChatClientResult> {
   const assignment = sessionStorage.getItem(assignmentKey(payload.sessionId));
-  if (assignment === 'legacy') return legacyRequest(payload);
+  const forceV03 = typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('v03') === '1';
+  if (assignment === 'legacy' && !forceV03) return legacyRequest(payload);
 
   const stateToken = sessionStorage.getItem(tokenKey(payload.sessionId)) || undefined;
   const canaryResponse = await fetch('/api/chat-v03-canary', {
