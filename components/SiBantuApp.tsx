@@ -107,6 +107,8 @@ export default function SiBantuApp() {
   const [query, setQuery] = useState('');
   const [cartOpen, setCartOpen] = useState(false);
   const [checkoutOpen, setCheckoutOpen] = useState(false);
+  const [checkoutStep, setCheckoutStep] = useState<1 | 2 | 3>(1);
+  const [orderNumber, setOrderNumber] = useState('');
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
   const [pickerQty, setPickerQty] = useState(1);
   const [pickerNote, setPickerNote] = useState('');
@@ -153,6 +155,11 @@ export default function SiBantuApp() {
 
   const cartCount = cart.length;
   const subtotal = cart.reduce((sum, item) => sum + (findProduct(item.productId)?.price ?? 0) * item.qty, 0);
+  const deliveryFee = cart.length ? STORE_CONFIG.deliveryFee : 0;
+  const grandTotal = subtotal + deliveryFee;
+  const checkoutValid = checkout.name.trim().length >= 2
+    && checkout.whatsapp.replace(/\D/g, '').length >= 10
+    && checkout.address.trim().length >= 8;
 
   const visibleProducts = useMemo(() => {
     const normalized = query.trim().toLowerCase();
@@ -215,7 +222,7 @@ export default function SiBantuApp() {
         setCartOpen(true);
         break;
       case 'checkout':
-        if (cart.length) setCheckoutOpen(true);
+        if (cart.length) openCheckout();
         else setView('store');
         break;
       default:
@@ -363,6 +370,39 @@ export default function SiBantuApp() {
     setGuideOpen(false);
     setView('chat');
     void submitText(text);
+  }
+
+  function openCheckout() {
+    if (!cart.length) return;
+    setOrderNumber(`SIB-${Date.now().toString(36).toUpperCase()}`);
+    setCheckoutStep(1);
+    setCartOpen(false);
+    setCheckoutOpen(true);
+  }
+
+  function sendOrderToAdmin() {
+    if (!checkoutValid || !cart.length) return;
+    const itemLines = cart.map((item, index) => {
+      const product = findProduct(item.productId);
+      if (!product) return null;
+      const lineTotal = product.price * item.qty;
+      return `${index + 1}. ${product.name} — ${formatQty(item.qty)} ${product.unit} — ${rupiah(lineTotal)}${item.note ? `\n   Catatan: ${item.note}` : ''}`;
+    }).filter(Boolean).join('\n');
+    const mapsLink = checkout.latitude != null && checkout.longitude != null
+      ? `https://maps.google.com/?q=${checkout.latitude},${checkout.longitude}`
+      : 'GPS belum dibagikan';
+    const message = `*ORDER SIBANTU ${orderNumber}*\n\n*Asal:* ${STORE_CONFIG.pickupAddress}\n*Penerima:* ${checkout.name}\n*WhatsApp:* ${checkout.whatsapp}\n*Alamat tujuan:* ${checkout.address}\n*Patokan:* ${checkout.landmark || '-'}\n*Lokasi GPS:* ${mapsLink}\n\n*BELANJAAN*\n${itemLines}\n\nSubtotal: ${rupiah(subtotal)}\nOngkir: ${rupiah(deliveryFee)}\n*TOTAL: ${rupiah(grandTotal)}*\nPembayaran: ${STORE_CONFIG.paymentMethod}\n\nMohon konfirmasi ketersediaan dan waktu pengantaran.`;
+    window.open(adminWhatsAppUrl(message), '_blank', 'noopener,noreferrer');
+    setCheckoutStep(3);
+  }
+
+  function startNewOrder() {
+    setCart([]);
+    setCheckoutOpen(false);
+    setCheckoutStep(1);
+    setCheckout({ name: '', whatsapp: '', address: '', landmark: '' });
+    setLocationStatus('Lokasi belum dipilih');
+    setView('chat');
   }
 
   function useLocation() {
@@ -626,7 +666,7 @@ export default function SiBantuApp() {
                 return <div className="cart-line" key={item.productId}><div className="cart-emoji">{product.emoji}</div><div className="cart-info"><h3>{product.name}</h3><span>{rupiah(product.price)} / {product.unit}</span>{item.note && <small className="item-note">📝 {item.note}</small>}<button onClick={() => setCartQty(product.id, 0)}>Hapus</button></div><div className="stepper"><button onClick={() => setCartQty(product.id, item.qty - step)}>−</button><b>{formatQty(item.qty)}<small>{product.unit}</small></b><button onClick={() => setCartQty(product.id, item.qty + step)}>+</button></div></div>;
               })}
             </div>
-            {cart.length > 0 && <div className="drawer-total"><div><span>Subtotal</span><strong>{rupiah(subtotal)}</strong></div><small>Ongkir dihitung setelah memilih lokasi.</small><button onClick={() => { setCartOpen(false); setCheckoutOpen(true); }}>Lanjut pilih lokasi</button></div>}
+            {cart.length > 0 && <div className="drawer-total"><div><span>Subtotal</span><strong>{rupiah(subtotal)}</strong></div><small>Ongkir area {STORE_CONFIG.deliveryArea}: {rupiah(deliveryFee)}</small><button onClick={openCheckout}>Lanjut alamat & GPS</button></div>}
           </aside>
         </div>
       )}
@@ -634,20 +674,60 @@ export default function SiBantuApp() {
       {checkoutOpen && (
         <div className="overlay checkout-overlay">
           <section className="checkout-panel">
-            <div className="drawer-head"><div><small>CHECKOUT</small><h2>Alamat pengantaran</h2></div><button onClick={() => setCheckoutOpen(false)}>×</button></div>
-            <div className="checkout-progress"><span className="active">1</span><i/><span>2</span><i/><span>3</span></div>
-            <div className="pickup-origin"><span>🏪</span><div><small>LOKASI ASAL PESANAN</small><b>{STORE_CONFIG.pickupAddress}</b></div></div>
-            <div className="map-placeholder"><div className="map-roads"/><div className="map-pin">📍</div><div className="map-copy"><strong>Pin lokasi rumah</strong><span>{locationStatus}</span></div></div>
-            <button className="gps-button" onClick={useLocation}>⌖ Gunakan lokasi saya sekarang</button>
-            <div className="form-grid">
-              <label>Nama penerima<input value={checkout.name} onChange={(event) => setCheckout({ ...checkout, name: event.target.value })} placeholder="Nama lengkap" /></label>
-              <label>Nomor WhatsApp<input value={checkout.whatsapp} onChange={(event) => setCheckout({ ...checkout, whatsapp: event.target.value })} placeholder="08xxxxxxxxxx" inputMode="tel" /></label>
-              <label className="full">Alamat lengkap<textarea value={checkout.address} onChange={(event) => setCheckout({ ...checkout, address: event.target.value })} placeholder="Desa, dusun, RT/RW, nomor rumah" /></label>
-              <label className="full">Patokan rumah<input value={checkout.landmark} onChange={(event) => setCheckout({ ...checkout, landmark: event.target.value })} placeholder="Contoh: samping masjid" /></label>
+            <div className="drawer-head">
+              <div><small>CHECKOUT • {orderNumber}</small><h2>{checkoutStep === 1 ? 'Alamat & lokasi' : checkoutStep === 2 ? 'Periksa pesanan' : 'Pesanan siap dikirim'}</h2></div>
+              <button onClick={() => setCheckoutOpen(false)}>×</button>
             </div>
-            <div className="checkout-summary"><span>{cartCount} barang</span><strong>{rupiah(subtotal)}</strong></div>
-            <button className="continue-button" disabled={!checkout.name || !checkout.whatsapp || !checkout.address}>Lanjut hitung ongkir →</button>
-            <small className="phase-note">Fondasi V2: penyimpanan pesanan dan peta interaktif disambungkan pada fase Supabase berikutnya.</small>
+            <div className="checkout-progress">
+              <span className={checkoutStep >= 1 ? 'active' : ''}>1</span><i className={checkoutStep >= 2 ? 'active' : ''}/>
+              <span className={checkoutStep >= 2 ? 'active' : ''}>2</span><i className={checkoutStep >= 3 ? 'active' : ''}/>
+              <span className={checkoutStep >= 3 ? 'active' : ''}>3</span>
+            </div>
+
+            {checkoutStep === 1 && (
+              <>
+                <div className="pickup-origin"><span>🏪</span><div><small>LOKASI ASAL PESANAN</small><b>{STORE_CONFIG.pickupAddress}</b></div></div>
+                <div className="map-placeholder"><div className="map-roads"/><div className="map-pin">📍</div><div className="map-copy"><strong>Lokasi tujuan</strong><span>{locationStatus}</span></div></div>
+                <button className="gps-button" onClick={useLocation}>⌖ Gunakan lokasi GPS saya</button>
+                {checkout.latitude != null && checkout.longitude != null && (
+                  <a className="gps-result" href={`https://maps.google.com/?q=${checkout.latitude},${checkout.longitude}`} target="_blank" rel="noreferrer">✓ GPS tersimpan • Lihat di Google Maps</a>
+                )}
+                <div className="form-grid">
+                  <label>Nama penerima<input value={checkout.name} onChange={(event) => setCheckout({ ...checkout, name: event.target.value })} placeholder="Nama lengkap" /></label>
+                  <label>Nomor WhatsApp<input value={checkout.whatsapp} onChange={(event) => setCheckout({ ...checkout, whatsapp: event.target.value })} placeholder="08xxxxxxxxxx" inputMode="tel" /></label>
+                  <label className="full">Alamat tujuan<textarea value={checkout.address} onChange={(event) => setCheckout({ ...checkout, address: event.target.value })} placeholder="Desa, dusun, RT/RW, nomor rumah" /></label>
+                  <label className="full">Patokan rumah<input value={checkout.landmark} onChange={(event) => setCheckout({ ...checkout, landmark: event.target.value })} placeholder="Contoh: samping masjid, rumah pagar biru" /></label>
+                </div>
+                <div className="checkout-summary"><span>{cartCount} jenis barang • Subtotal</span><strong>{rupiah(subtotal)}</strong></div>
+                <button className="continue-button" onClick={() => setCheckoutStep(2)} disabled={!checkoutValid}>Lanjut periksa pesanan →</button>
+                <small className="phase-note">GPS disarankan agar kurir mudah menemukan lokasi. Alamat lengkap tetap wajib.</small>
+              </>
+            )}
+
+            {checkoutStep === 2 && (
+              <>
+                <div className="review-address"><span>📍</span><div><small>DIANTAR KE</small><b>{checkout.name} • {checkout.whatsapp}</b><p>{checkout.address}{checkout.landmark ? ` • ${checkout.landmark}` : ''}</p>{checkout.latitude != null && checkout.longitude != null && <a href={`https://maps.google.com/?q=${checkout.latitude},${checkout.longitude}`} target="_blank" rel="noreferrer">Buka GPS di Maps ↗</a>}</div></div>
+                <div className="review-items">
+                  {cart.map((item) => { const product = findProduct(item.productId); if (!product) return null; return <article key={item.productId}><span>{product.emoji}</span><div><b>{product.name}</b><small>{formatQty(item.qty)} {product.unit}{item.note ? ` • ${item.note}` : ''}</small></div><strong>{rupiah(product.price * item.qty)}</strong></article>; })}
+                </div>
+                <div className="price-breakdown">
+                  <div><span>Subtotal</span><b>{rupiah(subtotal)}</b></div>
+                  <div><span>Ongkir {STORE_CONFIG.deliveryArea}</span><b>{rupiah(deliveryFee)}</b></div>
+                  <div className="grand"><span>Total bayar</span><b>{rupiah(grandTotal)}</b></div>
+                  <small>{STORE_CONFIG.paymentMethod}</small>
+                </div>
+                <div className="checkout-actions"><button onClick={() => setCheckoutStep(1)}>← Ubah alamat</button><button onClick={sendOrderToAdmin}>Kirim order ke WhatsApp →</button></div>
+              </>
+            )}
+
+            {checkoutStep === 3 && (
+              <div className="order-success">
+                <span>✅</span><h3>Order {orderNumber} siap diproses</h3><p>Rincian dan lokasi sudah dibuka di WhatsApp admin. Kirim pesannya untuk meminta konfirmasi stok dan waktu pengantaran.</p>
+                <div><small>TOTAL</small><b>{rupiah(grandTotal)}</b></div>
+                <button onClick={() => window.open(adminWhatsAppUrl(`Halo Admin SiBantu, mohon cek order ${orderNumber}.`), '_blank')}>Buka WhatsApp lagi</button>
+                <button className="secondary" onClick={startNewOrder}>Buat pesanan baru</button>
+              </div>
+            )}
           </section>
         </div>
       )}
