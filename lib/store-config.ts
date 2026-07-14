@@ -5,6 +5,8 @@ export const STORE_CONFIG = {
   pickupName: 'Pasar Inpres',
   pickupAddress: 'Pasar Inpres, Desa Kepala Pasar, Kecamatan Kaur Selatan',
   deliveryArea: 'Kaur Selatan dan sekitarnya',
+  deliveryFee: 5000,
+  paymentMethod: 'COD / bayar saat pesanan diterima',
 };
 
 export function adminWhatsAppUrl(message: string) {
