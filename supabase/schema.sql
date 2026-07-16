@@ -25,7 +25,8 @@ create table public.guest_sessions (
 
 create table public.stores (
   id uuid primary key default gen_random_uuid(),
-  owner_id uuid not null references public.profiles(id) on delete cascade,
+  owner_id uuid references public.profiles(id) on delete cascade,
+  is_platform_store boolean not null default false,
   name text not null,
   slug text not null unique,
   description text,
@@ -40,7 +41,8 @@ create table public.stores (
   banner_url text,
   opening_hours jsonb not null default '{}'::jsonb,
   created_at timestamptz not null default now(),
-  updated_at timestamptz not null default now()
+  updated_at timestamptz not null default now(),
+  check (owner_id is not null or is_platform_store = true)
 );
 
 create table public.seller_applications (
