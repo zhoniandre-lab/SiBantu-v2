@@ -9,6 +9,7 @@ create or replace function public.create_guest_order(
   p_latitude double precision,
   p_longitude double precision,
   p_delivery_fee numeric,
+  p_customer_id uuid,
   p_items jsonb
 ) returns jsonb
 language plpgsql
@@ -77,16 +78,22 @@ begin
   select coalesce(sum(line_total), 0) into v_subtotal from tmp_order_items;
   v_total := v_subtotal + greatest(coalesce(p_delivery_fee, 0), 0);
 
-  insert into guest_sessions default values returning id, public_token into v_guest_id, v_guest_token;
-
-  insert into addresses(guest_session_id, recipient_name, phone, address_text, landmark, latitude, longitude)
-  values (v_guest_id, trim(p_recipient_name), p_phone, trim(p_address_text), nullif(trim(p_landmark), ''), p_latitude, p_longitude)
-  returning id into v_address_id;
+  if p_customer_id is not null then
+    if not exists (select 1 from profiles where id = p_customer_id) then raise exception 'CUSTOMER_NOT_FOUND'; end if;
+    insert into addresses(customer_id, recipient_name, phone, address_text, landmark, latitude, longitude)
+    values (p_customer_id, trim(p_recipient_name), p_phone, trim(p_address_text), nullif(trim(p_landmark), ''), p_latitude, p_longitude)
+    returning id into v_address_id;
+  else
+    insert into guest_sessions default values returning id, public_token into v_guest_id, v_guest_token;
+    insert into addresses(guest_session_id, recipient_name, phone, address_text, landmark, latitude, longitude)
+    values (v_guest_id, trim(p_recipient_name), p_phone, trim(p_address_text), nullif(trim(p_landmark), ''), p_latitude, p_longitude)
+    returning id into v_address_id;
+  end if;
 
   v_order_number := 'SIB-' || to_char(now(), 'YYMMDD') || '-' || upper(substr(replace(gen_random_uuid()::text, '-', ''), 1, 8));
 
-  insert into orders(order_number, guest_session_id, address_id, status, subtotal, delivery_fee, discount, total, payment_method)
-  values (v_order_number, v_guest_id, v_address_id, 'pending', v_subtotal, greatest(coalesce(p_delivery_fee, 0), 0), 0, v_total, 'cod')
+  insert into orders(order_number, customer_id, guest_session_id, address_id, status, subtotal, delivery_fee, discount, total, payment_method)
+  values (v_order_number, p_customer_id, v_guest_id, v_address_id, 'pending', v_subtotal, greatest(coalesce(p_delivery_fee, 0), 0), 0, v_total, 'cod')
   returning id into v_order_id;
 
   insert into store_orders(order_id, store_id, status, items_subtotal, platform_fee, seller_net)
@@ -101,11 +108,12 @@ begin
   join stores s on s.id = t.store_id
   group by store_id, s.commission_rate;
 
-  insert into order_items(order_id, store_order_id, store_id, product_name, variant_label, unit_price, quantity, line_total, note)
+  insert into order_items(order_id, store_order_id, store_id, product_id, product_name, variant_label, unit_price, quantity, line_total, note)
   select
     v_order_id,
     so.id,
     t.store_id,
+    t.product_id,
     t.product_name,
     t.variant_label,
     t.unit_price,
@@ -130,5 +138,6 @@ begin
 end;
 $$;
 
-revoke all on function public.create_guest_order(text,text,text,text,double precision,double precision,numeric,jsonb) from public, anon, authenticated;
-grant execute on function public.create_guest_order(text,text,text,text,double precision,double precision,numeric,jsonb) to service_role;
+drop function if exists public.create_guest_order(text,text,text,text,double precision,double precision,numeric,jsonb);
+revoke all on function public.create_guest_order(text,text,text,text,double precision,double precision,numeric,uuid,jsonb) from public, anon, authenticated;
+grant execute on function public.create_guest_order(text,text,text,text,double precision,double precision,numeric,uuid,jsonb) to service_role;
