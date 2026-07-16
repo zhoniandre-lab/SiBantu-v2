@@ -1,0 +1,12 @@
+'use client';
+
+import { FormEvent, useState } from 'react';
+import { getBrowserSupabase } from '@/lib/supabase/client';
+
+export default function CustomerLogin(){
+ const [email,setEmail]=useState(''),[password,setPassword]=useState(''),[loading,setLoading]=useState(false),[error,setError]=useState(''),[message,setMessage]=useState('');
+ function destination(){const next=new URLSearchParams(window.location.search).get('next');return next&&next.startsWith('/')&&!next.startsWith('//')?next:'/akun/dashboard'}
+ async function login(event:FormEvent){event.preventDefault();setLoading(true);setError('');try{const supabase=getBrowserSupabase();const {error:authError}=await supabase.auth.signInWithPassword({email:email.trim(),password});if(authError)throw authError;const marketing=localStorage.getItem('sibantu_customer_marketing');if(marketing==='1'){await supabase.rpc('set_marketing_consent',{p_channel:'email',p_subscribed:true,p_destination:email.trim()});localStorage.removeItem('sibantu_customer_marketing');}window.location.href=destination();}catch(reason){setError(reason instanceof Error?reason.message:'Login gagal.')}finally{setLoading(false)}}
+ async function magicLink(){setLoading(true);setError('');setMessage('');try{if(!email.trim())throw new Error('Isi email terlebih dahulu.');const {error:linkError}=await getBrowserSupabase().auth.signInWithOtp({email:email.trim(),options:{emailRedirectTo:`${window.location.origin}${destination()}`}});if(linkError)throw linkError;setMessage('Link login sudah dikirim. Periksa inbox atau spam.');}catch(reason){setError(reason instanceof Error?reason.message:'Magic link gagal.')}finally{setLoading(false)}}
+ return <form className="account-card" onSubmit={login}><div className="account-icon">🔐</div><h1>Masuk Pembeli</h1><p>Akses alamat, pesanan, review, dan notifikasi.</p><label>Email<input type="email" value={email} onChange={e=>setEmail(e.target.value)} required/></label><label>Password<input type="password" value={password} onChange={e=>setPassword(e.target.value)}/></label>{error&&<div className="account-alert error">{error}</div>}{message&&<div className="account-alert success">{message}</div>}<button disabled={loading}>{loading?'Memproses...':'Masuk'}</button><button type="button" className="magic-link" disabled={loading} onClick={()=>void magicLink()}>Kirim magic link ke email</button><a href="/akun/daftar">Belum punya akun? Daftar</a></form>
+}
