@@ -76,6 +76,7 @@ function ProductCard({
         </div>
         <h3>{product.name}</h3>
         {product.storeName && <div className="seller-name">🏪 {product.storeName}</div>}
+        <div className="card-reputation"><span>⭐ {product.averageRating?.toFixed(1)||'0.0'}</span><span>{formatQty(product.soldCount||0)} terjual</span></div>
         {!compact && <p>{product.description}</p>}
         <div className="product-bottom">
           <div>
@@ -114,6 +115,7 @@ export default function SiBantuApp() {
   const [orderSaving, setOrderSaving] = useState(false);
   const [orderSaved, setOrderSaved] = useState(false);
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
+  const [selectedMediaIndex, setSelectedMediaIndex] = useState(0);
   const [pickerQty, setPickerQty] = useState(1);
   const [pickerNote, setPickerNote] = useState('');
   const [guideOpen, setGuideOpen] = useState(false);
@@ -176,6 +178,7 @@ export default function SiBantuApp() {
   const checkoutValid = checkout.name.trim().length >= 2
     && checkout.whatsapp.replace(/\D/g, '').length >= 10
     && checkout.address.trim().length >= 8;
+  const selectedMedia = selectedProduct?.media?.[selectedMediaIndex];
 
   const visibleProducts = useMemo(() => {
     const normalized = query.trim().toLowerCase();
@@ -194,6 +197,7 @@ export default function SiBantuApp() {
 
   function openProductPicker(product: Product) {
     setSelectedProduct(product);
+    setSelectedMediaIndex(0);
     setPickerQty(product.quickQuantities?.[0] ?? product.step ?? 1);
     setPickerNote('');
   }
@@ -670,9 +674,12 @@ export default function SiBantuApp() {
         <div className="overlay product-picker-overlay" onMouseDown={(event) => event.target === event.currentTarget && setSelectedProduct(null)}>
           <section className="product-picker">
             <button className="picker-close" onClick={() => setSelectedProduct(null)}>×</button>
-            <div className="picker-visual">{selectedProduct.imageUrl ? <img src={selectedProduct.imageUrl} alt={selectedProduct.name} /> : selectedProduct.emoji}</div>
+            <div className="product-gallery-main">{selectedMedia?.type==='video'?<video src={selectedMedia.url} controls playsInline/>:selectedMedia?.url?<img src={selectedMedia.url} alt={selectedProduct.name}/>:selectedProduct.imageUrl?<img src={selectedProduct.imageUrl} alt={selectedProduct.name}/>:<span>{selectedProduct.emoji}</span>}</div>
+            {selectedProduct.media&&selectedProduct.media.length>1&&<div className="product-gallery-thumbs">{selectedProduct.media.map((media,index)=><button className={selectedMediaIndex===index?'active':''} key={media.id||media.url} onClick={()=>setSelectedMediaIndex(index)}>{media.type==='video'?<span>▶</span>:<img src={media.thumbnailUrl||media.url} alt=""/>}</button>)}</div>}
             <small>{selectedProduct.category.toUpperCase()}</small>
             <h2>{selectedProduct.name}</h2>
+            <div className="product-reputation"><span>⭐ {selectedProduct.averageRating?.toFixed(1)||'0.0'} ({selectedProduct.reviewCount||0} ulasan)</span><span>{formatQty(selectedProduct.soldCount||0)} terjual</span></div>
+            <div className="store-reputation">🏪 <b>{selectedProduct.storeName||'SiBantu'}</b><span>⭐ {selectedProduct.storeRating?.toFixed(1)||'0.0'} ({selectedProduct.storeReviewCount||0})</span></div>
             <p>{selectedProduct.description}</p>
             <div className="picker-price"><strong>{rupiah(selectedProduct.price)}</strong><span>per {selectedProduct.unit}</span></div>
             <div className="picker-label"><b>Pilih jumlah</b><span>Bisa diubah lagi di keranjang</span></div>
