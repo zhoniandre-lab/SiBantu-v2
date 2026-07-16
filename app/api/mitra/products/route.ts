@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { ownedStore } from '@/lib/supabase/auth-server';
+import { evaluateProductRisk } from '@/lib/marketplace/product-risk';
 
 function text(value: unknown, max = 200) { return String(value ?? '').trim().slice(0, max); }
 
@@ -28,7 +29,16 @@ export async function POST(request: NextRequest) {
   const { data: category } = await auth.supabase.from('categories').select('id').eq('slug', categorySlug).eq('is_active', true).maybeSingle();
   if (!category) return NextResponse.json({ error: 'Kategori tidak valid.' }, { status: 400 });
 
-  const { data: product, error: productError } = await auth.supabase.from('products').insert({ store_id: auth.store.id, category_id: category.id, name, description, emoji, moderation_status: 'pending', is_active: false }).select('id').single();
+  const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000).toISOString();
+  const [{ count: duplicateCount }, { count: recentCount }] = await Promise.all([
+    auth.supabase.from('products').select('*', { count: 'exact', head: true }).eq('store_id', auth.store.id).ilike('name', name),
+    auth.supabase.from('products').select('*', { count: 'exact', head: true }).eq('store_id', auth.store.id).gte('created_at', oneHourAgo),
+  ]);
+  const risk = evaluateProductRisk({ name, description, category: categorySlug, price, stock, duplicate: (duplicateCount ?? 0) > 0, uploadsLastHour: recentCount ?? 0 });
+  const moderationStatus = risk.safe ? 'approved' : 'pending';
+  const moderationNote = risk.safe ? 'Lolos validasi otomatis.' : `Menunggu review: ${risk.reasons.join('; ')}`;
+
+  const { data: product, error: productError } = await auth.supabase.from('products').insert({ store_id: auth.store.id, category_id: category.id, name, description, emoji, moderation_status: moderationStatus, moderation_note: moderationNote, is_active: risk.safe }).select('id').single();
   if (productError || !product) return NextResponse.json({ error: productError?.message || 'Produk gagal dibuat.' }, { status: 500 });
 
   const sku = `MIT-${auth.store.id.slice(0, 5).toUpperCase()}-${product.id}`;
@@ -37,7 +47,7 @@ export async function POST(request: NextRequest) {
 
   const aliasRows = [...new Set([name.toLowerCase(), ...aliases])].map((alias) => ({ product_id: product.id, alias }));
   if (aliasRows.length) await auth.supabase.from('product_aliases').insert(aliasRows);
-  return NextResponse.json({ ok: true, productId: product.id, status: 'pending' });
+  return NextResponse.json({ ok: true, productId: product.id, status: moderationStatus, autoPublished: risk.safe, riskScore: risk.score, reasons: risk.reasons });
 }
 
 export async function PATCH(request: NextRequest) {
@@ -45,7 +55,7 @@ export async function PATCH(request: NextRequest) {
   if (!auth.ok) return NextResponse.json({ error: auth.error }, { status: auth.status });
   const body = await request.json(); const productId = Number(body.productId);
   if (!Number.isInteger(productId)) return NextResponse.json({ error: 'Product ID tidak valid.' }, { status: 400 });
-  const { data: product } = await auth.supabase.from('products').select('id').eq('id', productId).eq('store_id', auth.store.id).maybeSingle();
+  const { data: product } = await auth.supabase.from('products').select('id,moderation_status').eq('id', productId).eq('store_id', auth.store.id).maybeSingle();
   if (!product) return NextResponse.json({ error: 'Produk bukan milik toko.' }, { status: 403 });
 
   const variantUpdate: Record<string, number | boolean> = {};
@@ -53,6 +63,9 @@ export async function PATCH(request: NextRequest) {
   if (Number.isFinite(Number(body.stock)) && Number(body.stock) >= 0) variantUpdate.stock = Number(body.stock);
   if (typeof body.variantActive === 'boolean') variantUpdate.is_active = body.variantActive;
   if (Object.keys(variantUpdate).length) await auth.supabase.from('product_variants').update(variantUpdate).eq('product_id', productId).eq('is_default', true);
-  if (typeof body.isActive === 'boolean') await auth.supabase.from('products').update({ is_active: body.isActive }).eq('id', productId).eq('store_id', auth.store.id);
+  if (typeof body.isActive === 'boolean') {
+    const nextActive = product.moderation_status === 'approved' ? body.isActive : false;
+    await auth.supabase.from('products').update({ is_active: nextActive }).eq('id', productId).eq('store_id', auth.store.id);
+  }
   return NextResponse.json({ ok: true });
 }
