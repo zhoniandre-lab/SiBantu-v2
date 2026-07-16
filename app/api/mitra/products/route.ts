@@ -21,6 +21,9 @@ export async function POST(request: NextRequest) {
   if (!auth.ok) return NextResponse.json({ error: auth.error }, { status: auth.status });
   const body = await request.json();
   const name = text(body.name, 120); const description = text(body.description, 500); const emoji = text(body.emoji, 8) || '📦';
+  const imageUrl = text(body.imageUrl, 1000);
+  const allowedImagePrefix = `${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/product-images/`;
+  if (imageUrl && !imageUrl.startsWith(allowedImagePrefix)) return NextResponse.json({ error: 'URL gambar tidak valid.' }, { status: 400 });
   const categorySlug = text(body.category, 40); const unit = text(body.unit, 40); const label = text(body.label, 80) || `1 ${unit}`;
   const price = Number(body.price); const stock = Number(body.stock);
   const aliases = Array.isArray(body.aliases) ? body.aliases.map((item: unknown) => text(item, 80).toLowerCase()).filter(Boolean).slice(0, 20) : [];
@@ -38,7 +41,7 @@ export async function POST(request: NextRequest) {
   const moderationStatus = risk.safe ? 'approved' : 'pending';
   const moderationNote = risk.safe ? 'Lolos validasi otomatis.' : `Menunggu review: ${risk.reasons.join('; ')}`;
 
-  const { data: product, error: productError } = await auth.supabase.from('products').insert({ store_id: auth.store.id, category_id: category.id, name, description, emoji, moderation_status: moderationStatus, moderation_note: moderationNote, is_active: risk.safe }).select('id').single();
+  const { data: product, error: productError } = await auth.supabase.from('products').insert({ store_id: auth.store.id, category_id: category.id, name, description, emoji, image_url: imageUrl || null, moderation_status: moderationStatus, moderation_note: moderationNote, is_active: risk.safe }).select('id').single();
   if (productError || !product) return NextResponse.json({ error: productError?.message || 'Produk gagal dibuat.' }, { status: 500 });
 
   const sku = `MIT-${auth.store.id.slice(0, 5).toUpperCase()}-${product.id}`;
