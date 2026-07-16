@@ -26,6 +26,7 @@ export type Product = {
   serviceOptions?: string[];
   storeName?: string;
   storeId?: string;
+  imageUrl?: string;
 };
 
 export type CartItem = {
