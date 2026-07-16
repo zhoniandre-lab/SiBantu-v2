@@ -4,6 +4,7 @@ import { FormEvent, useEffect, useMemo, useRef, useState } from 'react';
 import { CATEGORIES, PRODUCTS, findProduct } from '@/lib/catalog';
 import { formatQty, makeId, rupiah } from '@/lib/format';
 import { requestChatWithCanary } from '@/lib/chat-v03/client';
+import { getBrowserSupabase } from '@/lib/supabase/client';
 import { adminWhatsAppUrl, STORE_CONFIG } from '@/lib/store-config';
 import type { CartItem, CategoryId, ChatMessage, CommerceAction, Product } from '@/lib/types';
 
@@ -423,9 +424,10 @@ export default function SiBantuApp() {
     let saved = false;
 
     try {
+      const { data: authData } = await getBrowserSupabase().auth.getSession();
       const response = await fetch('/api/orders', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...(authData.session?.access_token ? { Authorization: `Bearer ${authData.session.access_token}` } : {}) },
         body: JSON.stringify({
           customer: checkout,
           items: cart.map((item) => ({ productId: item.productId, quantity: item.qty, note: item.note })),
@@ -497,6 +499,7 @@ export default function SiBantuApp() {
         </button>
         <div className="top-actions">
           <button className="location-pill" title={STORE_CONFIG.pickupAddress}>📍 {STORE_CONFIG.pickupName}</button>
+          <a className="account-button" href="/akun/dashboard" aria-label="Buka akun">👤</a>
           <button className="cart-button" onClick={() => setCartOpen(true)}>🛒<b>{cartCount}</b></button>
         </div>
       </header>
