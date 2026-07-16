@@ -21,13 +21,35 @@ export async function PATCH(request: NextRequest) {
   const auth = await ownedStore(request);
   if (!auth.ok) return NextResponse.json({ error: auth.error }, { status: auth.status });
   const body = await request.json(); const orderId = String(body.orderId ?? ''); const status = String(body.status ?? '');
+  const reason = String(body.reason ?? '').trim().slice(0, 300);
   if (!orderId || !ALLOWED_STATUS.includes(status)) return NextResponse.json({ error: 'Status atau order tidak valid.' }, { status: 400 });
+
+  const { data: current, error: currentError } = await auth.supabase.from('store_orders').select('id,order_id,status').eq('id', orderId).eq('store_id', auth.store.id).maybeSingle();
+  if (currentError) return NextResponse.json({ error: currentError.message }, { status: 500 });
+  if (!current) return NextResponse.json({ error: 'Order bukan milik toko.' }, { status: 403 });
+  if (current.status === status) return NextResponse.json({ ok: true, status, unchanged: true });
+
+  const transitions: Record<string, string[]> = {
+    pending: ['confirmed', 'cancelled'],
+    confirmed: ['preparing', 'cancelled'],
+    preparing: ['delivering', 'cancelled'],
+    delivering: ['completed'],
+    completed: [],
+    cancelled: [],
+  };
+  if (!(transitions[current.status] ?? []).includes(status)) {
+    return NextResponse.json({ error: `Status tidak dapat diubah dari ${current.status} ke ${status}.` }, { status: 409 });
+  }
+  if (status === 'cancelled' && reason.length < 4) {
+    return NextResponse.json({ error: 'Alasan pembatalan wajib diisi.' }, { status: 400 });
+  }
+
   const timestamps: Record<string,string> = {};
   if (status === 'confirmed') timestamps.accepted_at = new Date().toISOString();
   if (status === 'preparing') timestamps.prepared_at = new Date().toISOString();
-  const { data, error } = await auth.supabase.from('store_orders').update({ status, ...timestamps }).eq('id', orderId).eq('store_id', auth.store.id).select('order_id').maybeSingle();
+  const { error } = await auth.supabase.from('store_orders').update({ status, ...timestamps }).eq('id', orderId).eq('store_id', auth.store.id);
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-  if (!data) return NextResponse.json({ error: 'Order bukan milik toko.' }, { status: 403 });
-  await auth.supabase.from('order_status_history').insert({ order_id: data.order_id, status, note: `Status diperbarui oleh toko ${auth.store.name}` });
+  const historyNote = status === 'cancelled' ? `Dibatalkan oleh toko ${auth.store.name}: ${reason}` : `Status diperbarui oleh toko ${auth.store.name}`;
+  await auth.supabase.from('order_status_history').insert({ order_id: current.order_id, status, note: historyNote });
   return NextResponse.json({ ok: true, status });
 }
