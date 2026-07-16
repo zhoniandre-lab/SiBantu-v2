@@ -109,6 +109,8 @@ export default function SiBantuApp() {
   const [checkoutOpen, setCheckoutOpen] = useState(false);
   const [checkoutStep, setCheckoutStep] = useState<1 | 2 | 3>(1);
   const [orderNumber, setOrderNumber] = useState('');
+  const [orderSaving, setOrderSaving] = useState(false);
+  const [orderSaved, setOrderSaved] = useState(false);
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
   const [pickerQty, setPickerQty] = useState(1);
   const [pickerNote, setPickerNote] = useState('');
@@ -121,6 +123,7 @@ export default function SiBantuApp() {
   const [locationStatus, setLocationStatus] = useState('Lokasi belum dipilih');
   const [toast, setToast] = useState<{ id: number; text: string } | null>(null);
   const [checkout, setCheckout] = useState<CheckoutData>({ name: '', whatsapp: '', address: '', landmark: '' });
+  const [checkoutErrors, setCheckoutErrors] = useState<Partial<Record<'name' | 'whatsapp' | 'address', string>>>({});
   const endRef = useRef<HTMLDivElement>(null);
   const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const speechRecognitionRef = useRef<BrowserSpeechRecognition | null>(null);
@@ -375,13 +378,52 @@ export default function SiBantuApp() {
   function openCheckout() {
     if (!cart.length) return;
     setOrderNumber(`SIB-${Date.now().toString(36).toUpperCase()}`);
+    setOrderSaving(false);
+    setOrderSaved(false);
     setCheckoutStep(1);
+    setCheckoutErrors({});
     setCartOpen(false);
     setCheckoutOpen(true);
   }
 
-  function sendOrderToAdmin() {
-    if (!checkoutValid || !cart.length) return;
+  function goToCheckoutReview() {
+    const errors: Partial<Record<'name' | 'whatsapp' | 'address', string>> = {};
+    if (checkout.name.trim().length < 2) errors.name = 'Nama penerima minimal 2 karakter.';
+    if (checkout.whatsapp.replace(/\D/g, '').length < 10) errors.whatsapp = 'Nomor WhatsApp minimal 10 angka.';
+    if (checkout.address.trim().length < 8) errors.address = 'Tulis alamat lebih lengkap, misalnya desa/dusun dan nomor rumah.';
+    setCheckoutErrors(errors);
+    if (Object.keys(errors).length === 0) setCheckoutStep(2);
+  }
+
+  function clearCheckoutError(field: 'name' | 'whatsapp' | 'address') {
+    setCheckoutErrors((current) => ({ ...current, [field]: undefined }));
+  }
+
+  async function sendOrderToAdmin() {
+    if (!checkoutValid || !cart.length || orderSaving) return;
+    setOrderSaving(true);
+    let finalOrderNumber = orderNumber;
+    let saved = false;
+
+    try {
+      const response = await fetch('/api/orders', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          customer: checkout,
+          items: cart.map((item) => ({ productId: item.productId, quantity: item.qty, note: item.note })),
+        }),
+      });
+      const data = await response.json().catch(() => null) as { saved?: boolean; order?: { order_number?: string } } | null;
+      if (response.ok && data?.saved) {
+        saved = true;
+        finalOrderNumber = data.order?.order_number || finalOrderNumber;
+        setOrderNumber(finalOrderNumber);
+      }
+    } catch {
+      // Database opsional pada fase ini. WhatsApp tetap menjadi fallback transaksi.
+    }
+
     const itemLines = cart.map((item, index) => {
       const product = findProduct(item.productId);
       if (!product) return null;
@@ -391,7 +433,10 @@ export default function SiBantuApp() {
     const mapsLink = checkout.latitude != null && checkout.longitude != null
       ? `https://maps.google.com/?q=${checkout.latitude},${checkout.longitude}`
       : 'GPS belum dibagikan';
-    const message = `*ORDER SIBANTU ${orderNumber}*\n\n*Asal:* ${STORE_CONFIG.pickupAddress}\n*Penerima:* ${checkout.name}\n*WhatsApp:* ${checkout.whatsapp}\n*Alamat tujuan:* ${checkout.address}\n*Patokan:* ${checkout.landmark || '-'}\n*Lokasi GPS:* ${mapsLink}\n\n*BELANJAAN*\n${itemLines}\n\nSubtotal: ${rupiah(subtotal)}\nOngkir: ${rupiah(deliveryFee)}\n*TOTAL: ${rupiah(grandTotal)}*\nPembayaran: ${STORE_CONFIG.paymentMethod}\n\nMohon konfirmasi ketersediaan dan waktu pengantaran.`;
+    const databaseStatus = saved ? 'Tersimpan di sistem' : 'Belum tersimpan di database — konfirmasi via WhatsApp';
+    const message = `*ORDER SIBANTU ${finalOrderNumber}*\nStatus: ${databaseStatus}\n\n*Asal:* ${STORE_CONFIG.pickupAddress}\n*Penerima:* ${checkout.name}\n*WhatsApp:* ${checkout.whatsapp}\n*Alamat tujuan:* ${checkout.address}\n*Patokan:* ${checkout.landmark || '-'}\n*Lokasi GPS:* ${mapsLink}\n\n*BELANJAAN*\n${itemLines}\n\nSubtotal: ${rupiah(subtotal)}\nOngkir: ${rupiah(deliveryFee)}\n*TOTAL: ${rupiah(grandTotal)}*\nPembayaran: ${STORE_CONFIG.paymentMethod}\n\nMohon konfirmasi ketersediaan dan waktu pengantaran.`;
+    setOrderSaved(saved);
+    setOrderSaving(false);
     window.open(adminWhatsAppUrl(message), '_blank', 'noopener,noreferrer');
     setCheckoutStep(3);
   }
@@ -401,6 +446,7 @@ export default function SiBantuApp() {
     setCheckoutOpen(false);
     setCheckoutStep(1);
     setCheckout({ name: '', whatsapp: '', address: '', landmark: '' });
+    setCheckoutErrors({});
     setLocationStatus('Lokasi belum dipilih');
     setView('chat');
   }
@@ -693,13 +739,13 @@ export default function SiBantuApp() {
                   <a className="gps-result" href={`https://maps.google.com/?q=${checkout.latitude},${checkout.longitude}`} target="_blank" rel="noreferrer">✓ GPS tersimpan • Lihat di Google Maps</a>
                 )}
                 <div className="form-grid">
-                  <label>Nama penerima<input value={checkout.name} onChange={(event) => setCheckout({ ...checkout, name: event.target.value })} placeholder="Nama lengkap" /></label>
-                  <label>Nomor WhatsApp<input value={checkout.whatsapp} onChange={(event) => setCheckout({ ...checkout, whatsapp: event.target.value })} placeholder="08xxxxxxxxxx" inputMode="tel" /></label>
-                  <label className="full">Alamat tujuan<textarea value={checkout.address} onChange={(event) => setCheckout({ ...checkout, address: event.target.value })} placeholder="Desa, dusun, RT/RW, nomor rumah" /></label>
+                  <label>Nama penerima<input className={checkoutErrors.name ? 'invalid' : ''} value={checkout.name} onChange={(event) => { setCheckout({ ...checkout, name: event.target.value }); clearCheckoutError('name'); }} placeholder="Nama lengkap" />{checkoutErrors.name && <small className="field-error">{checkoutErrors.name}</small>}</label>
+                  <label>Nomor WhatsApp<input className={checkoutErrors.whatsapp ? 'invalid' : ''} value={checkout.whatsapp} onChange={(event) => { setCheckout({ ...checkout, whatsapp: event.target.value }); clearCheckoutError('whatsapp'); }} placeholder="08xxxxxxxxxx" inputMode="tel" />{checkoutErrors.whatsapp && <small className="field-error">{checkoutErrors.whatsapp}</small>}</label>
+                  <label className="full">Alamat tujuan<textarea className={checkoutErrors.address ? 'invalid' : ''} value={checkout.address} onChange={(event) => { setCheckout({ ...checkout, address: event.target.value }); clearCheckoutError('address'); }} placeholder="Desa, dusun, RT/RW, nomor rumah" />{checkoutErrors.address && <small className="field-error">{checkoutErrors.address}</small>}</label>
                   <label className="full">Patokan rumah<input value={checkout.landmark} onChange={(event) => setCheckout({ ...checkout, landmark: event.target.value })} placeholder="Contoh: samping masjid, rumah pagar biru" /></label>
                 </div>
                 <div className="checkout-summary"><span>{cartCount} jenis barang • Subtotal</span><strong>{rupiah(subtotal)}</strong></div>
-                <button className="continue-button" onClick={() => setCheckoutStep(2)} disabled={!checkoutValid}>Lanjut periksa pesanan →</button>
+                <button className="continue-button" onClick={goToCheckoutReview}>Lanjut periksa pesanan →</button>
                 <small className="phase-note">GPS disarankan agar kurir mudah menemukan lokasi. Alamat lengkap tetap wajib.</small>
               </>
             )}
@@ -716,13 +762,13 @@ export default function SiBantuApp() {
                   <div className="grand"><span>Total bayar</span><b>{rupiah(grandTotal)}</b></div>
                   <small>{STORE_CONFIG.paymentMethod}</small>
                 </div>
-                <div className="checkout-actions"><button onClick={() => setCheckoutStep(1)}>← Ubah alamat</button><button onClick={sendOrderToAdmin}>Kirim order ke WhatsApp →</button></div>
+                <div className="checkout-actions"><button onClick={() => setCheckoutStep(1)}>← Ubah alamat</button><button disabled={orderSaving} onClick={() => void sendOrderToAdmin()}>{orderSaving ? 'Menyimpan pesanan...' : 'Kirim order ke WhatsApp →'}</button></div>
               </>
             )}
 
             {checkoutStep === 3 && (
               <div className="order-success">
-                <span>✅</span><h3>Order {orderNumber} siap diproses</h3><p>Rincian dan lokasi sudah dibuka di WhatsApp admin. Kirim pesannya untuk meminta konfirmasi stok dan waktu pengantaran.</p>
+                <span>✅</span><h3>Order {orderNumber} siap diproses</h3><p>{orderSaved ? 'Pesanan sudah tersimpan di sistem dan rincian dibuka di WhatsApp admin.' : 'Database belum aktif, tetapi rincian dan lokasi sudah dibuka di WhatsApp admin sebagai fallback.'} Kirim pesannya untuk meminta konfirmasi stok dan waktu pengantaran.</p>
                 <div><small>TOTAL</small><b>{rupiah(grandTotal)}</b></div>
                 <button onClick={() => window.open(adminWhatsAppUrl(`Halo Admin SiBantu, mohon cek order ${orderNumber}.`), '_blank')}>Buka WhatsApp lagi</button>
                 <button className="secondary" onClick={startNewOrder}>Buat pesanan baru</button>
