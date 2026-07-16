@@ -24,6 +24,8 @@ export type Product = {
   packageSize?: number;
   allowPartial?: boolean;
   serviceOptions?: string[];
+  storeName?: string;
+  storeId?: string;
 };
 
 export type CartItem = {
