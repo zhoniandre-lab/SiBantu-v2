@@ -64,9 +64,9 @@ function ProductCard({
   cartQty?: number;
 }) {
   return (
-    <article className={`product-card ${compact ? 'compact' : ''} ${cartQty > 0 ? 'in-cart' : ''}`}>
+    <article className={`product-card ${compact ? 'compact' : ''} ${cartQty > 0 ? 'in-cart' : ''}`} role="button" tabIndex={0} onClick={onAdd} onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') onAdd(); }}>
       <div className="product-visual" aria-hidden="true">
-        <span>{product.emoji}</span>
+        {product.imageUrl ? <img src={product.imageUrl} alt="" loading="lazy" /> : <span>{product.emoji}</span>}
         {product.badge && <small>{product.badge}</small>}
       </div>
       <div className="product-copy">
@@ -84,7 +84,7 @@ function ProductCard({
           </div>
           <button
             className={cartQty > 0 ? 'added' : ''}
-            onClick={onAdd}
+            onClick={(event) => { event.stopPropagation(); onAdd(); }}
             disabled={product.stock <= 0}
             aria-label={`Tambah ${product.name}`}
           >
@@ -670,7 +670,7 @@ export default function SiBantuApp() {
         <div className="overlay product-picker-overlay" onMouseDown={(event) => event.target === event.currentTarget && setSelectedProduct(null)}>
           <section className="product-picker">
             <button className="picker-close" onClick={() => setSelectedProduct(null)}>×</button>
-            <div className="picker-visual">{selectedProduct.emoji}</div>
+            <div className="picker-visual">{selectedProduct.imageUrl ? <img src={selectedProduct.imageUrl} alt={selectedProduct.name} /> : selectedProduct.emoji}</div>
             <small>{selectedProduct.category.toUpperCase()}</small>
             <h2>{selectedProduct.name}</h2>
             <p>{selectedProduct.description}</p>
