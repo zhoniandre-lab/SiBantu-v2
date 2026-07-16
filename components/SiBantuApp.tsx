@@ -543,6 +543,7 @@ export default function SiBantuApp() {
               <button onClick={() => setView('store')}>▦ Semua Menu</button>
               <button onClick={() => setCartOpen(true)}>🛒 Keranjang {cartCount ? `(${cartCount})` : ''}</button>
               <button onClick={() => openGuide('start')}>✨ Belanja Pintar</button>
+              <a href="/mitra/daftar">🏪 Jual di SiBantu</a>
             </div>
             <form className="composer" onSubmit={sendMessage}>
               <button
