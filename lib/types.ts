@@ -7,6 +7,14 @@ export type CategoryId =
   | 'bumbu'
   | 'rumah';
 
+export type ProductMedia = {
+  id?: string;
+  type: 'image' | 'video';
+  url: string;
+  thumbnailUrl?: string;
+  sortOrder?: number;
+};
+
 export type Product = {
   id: number;
   name: string;
@@ -27,6 +35,12 @@ export type Product = {
   storeName?: string;
   storeId?: string;
   imageUrl?: string;
+  media?: ProductMedia[];
+  averageRating?: number;
+  reviewCount?: number;
+  soldCount?: number;
+  storeRating?: number;
+  storeReviewCount?: number;
 };
 
 export type CartItem = {
