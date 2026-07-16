@@ -16,7 +16,7 @@ export async function GET() {
     const variant = row.product_variants?.find((item: any) => item.is_default && item.is_active);
     if (!variant) return null;
     return {
-      id: Number(row.id), name: row.name, description: row.description || '', emoji: row.emoji || '📦',
+      id: Number(row.id), name: row.name, description: row.description || '', emoji: row.emoji || '📦', imageUrl: row.image_url || undefined,
       category: row.categories?.slug, price: Number(variant.price), unit: variant.unit,
       aliases: (row.product_aliases || []).map((item: any) => item.alias), stock: Number(variant.stock),
       storeName: row.stores?.name || 'SiBantu', storeId: row.store_id,
