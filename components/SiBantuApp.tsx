@@ -75,6 +75,7 @@ function ProductCard({
           {cartQty > 0 && <b>{formatQty(cartQty)} {product.unit} di keranjang</b>}
         </div>
         <h3>{product.name}</h3>
+        {product.storeName && <div className="seller-name">🏪 {product.storeName}</div>}
         {!compact && <p>{product.description}</p>}
         <div className="product-bottom">
           <div>
@@ -97,6 +98,7 @@ function ProductCard({
 
 export default function SiBantuApp() {
   const [view, setView] = useState<ViewMode>('chat');
+  const [catalogProducts, setCatalogProducts] = useState<Product[]>(PRODUCTS);
   const [messages, setMessages] = useState<ChatMessage[]>(INITIAL_MESSAGES);
   const [cart, setCart] = useState<CartItem[]>([]);
   const [sessionId, setSessionId] = useState('');
@@ -142,6 +144,13 @@ export default function SiBantuApp() {
   }, []);
 
   useEffect(() => {
+    fetch('/api/catalog')
+      .then((response) => response.ok ? response.json() : null)
+      .then((data) => { if (data?.products?.length) setCatalogProducts(data.products); })
+      .catch(() => undefined);
+  }, []);
+
+  useEffect(() => {
     return () => {
       if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
       speechRecognitionRef.current?.abort();
@@ -156,8 +165,12 @@ export default function SiBantuApp() {
     if (view === 'chat') endRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, loading, view]);
 
+  function productById(id: number) {
+    return catalogProducts.find((product) => product.id === id) ?? findProduct(id);
+  }
+
   const cartCount = cart.length;
-  const subtotal = cart.reduce((sum, item) => sum + (findProduct(item.productId)?.price ?? 0) * item.qty, 0);
+  const subtotal = cart.reduce((sum, item) => sum + (productById(item.productId)?.price ?? 0) * item.qty, 0);
   const deliveryFee = cart.length ? STORE_CONFIG.deliveryFee : 0;
   const grandTotal = subtotal + deliveryFee;
   const checkoutValid = checkout.name.trim().length >= 2
@@ -166,12 +179,12 @@ export default function SiBantuApp() {
 
   const visibleProducts = useMemo(() => {
     const normalized = query.trim().toLowerCase();
-    return PRODUCTS.filter((product) => {
+    return catalogProducts.filter((product) => {
       const inCategory = category === 'semua' || product.category === category;
       const searchable = [product.name, ...product.aliases, product.description].join(' ').toLowerCase();
       return inCategory && (!normalized || searchable.includes(normalized));
     });
-  }, [category, query]);
+  }, [category, query, catalogProducts]);
 
   function showCartToast(productName: string, qty: number, unit: string) {
     if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
@@ -192,7 +205,7 @@ export default function SiBantuApp() {
   }
 
   function addToCart(productId: number, qty = 1, note?: string) {
-    const product = findProduct(productId);
+    const product = productById(productId);
     if (product) showCartToast(product.name, qty, product.unit);
     setCart((current) => {
       const existing = current.find((item) => item.productId === productId);
@@ -334,7 +347,7 @@ export default function SiBantuApp() {
   function continueShoppingInChat() {
     const selectedNames = cart
       .map((item) => {
-        const product = findProduct(item.productId);
+        const product = productById(item.productId);
         return product ? `${product.name} ${formatQty(item.qty)} ${product.unit}` : null;
       })
       .filter(Boolean);
@@ -425,7 +438,7 @@ export default function SiBantuApp() {
     }
 
     const itemLines = cart.map((item, index) => {
-      const product = findProduct(item.productId);
+      const product = productById(item.productId);
       if (!product) return null;
       const lineTotal = product.price * item.qty;
       return `${index + 1}. ${product.name} — ${formatQty(item.qty)} ${product.unit} — ${rupiah(lineTotal)}${item.note ? `\n   Catatan: ${item.note}` : ''}`;
@@ -707,7 +720,7 @@ export default function SiBantuApp() {
             <div className="drawer-items">
               {!cart.length && <div className="empty-state"><span>🧺</span><h3>Keranjang masih kosong</h3><p>Buka semua menu atau bilang kebutuhan Kakak melalui chat.</p><button onClick={() => { setCartOpen(false); setView('store'); }}>Lihat semua menu</button></div>}
               {cart.map((item) => {
-                const product = findProduct(item.productId);
+                const product = productById(item.productId);
                 if (!product) return null;
                 const step = product.step ?? 1;
                 return <div className="cart-line" key={item.productId}><div className="cart-emoji">{product.emoji}</div><div className="cart-info"><h3>{product.name}</h3><span>{rupiah(product.price)} / {product.unit}</span>{item.note && <small className="item-note">📝 {item.note}</small>}<button onClick={() => setCartQty(product.id, 0)}>Hapus</button></div><div className="stepper"><button onClick={() => setCartQty(product.id, item.qty - step)}>−</button><b>{formatQty(item.qty)}<small>{product.unit}</small></b><button onClick={() => setCartQty(product.id, item.qty + step)}>+</button></div></div>;
@@ -755,7 +768,7 @@ export default function SiBantuApp() {
               <>
                 <div className="review-address"><span>📍</span><div><small>DIANTAR KE</small><b>{checkout.name} • {checkout.whatsapp}</b><p>{checkout.address}{checkout.landmark ? ` • ${checkout.landmark}` : ''}</p>{checkout.latitude != null && checkout.longitude != null && <a href={`https://maps.google.com/?q=${checkout.latitude},${checkout.longitude}`} target="_blank" rel="noreferrer">Buka GPS di Maps ↗</a>}</div></div>
                 <div className="review-items">
-                  {cart.map((item) => { const product = findProduct(item.productId); if (!product) return null; return <article key={item.productId}><span>{product.emoji}</span><div><b>{product.name}</b><small>{formatQty(item.qty)} {product.unit}{item.note ? ` • ${item.note}` : ''}</small></div><strong>{rupiah(product.price * item.qty)}</strong></article>; })}
+                  {cart.map((item) => { const product = productById(item.productId); if (!product) return null; return <article key={item.productId}><span>{product.emoji}</span><div><b>{product.name}</b><small>{formatQty(item.qty)} {product.unit}{item.note ? ` • ${item.note}` : ''}</small></div><strong>{rupiah(product.price * item.qty)}</strong></article>; })}
                 </div>
                 <div className="price-breakdown">
                   <div><span>Subtotal</span><b>{rupiah(subtotal)}</b></div>
