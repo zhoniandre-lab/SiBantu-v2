@@ -45,6 +45,13 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ ok: false, error: 'Data penerima atau item belum lengkap.' }, { status: 400 });
     }
 
+    let customerId: string | null = null;
+    const accessToken = request.headers.get('authorization')?.replace(/^Bearer\s+/i, '');
+    if (accessToken) {
+      const { data: authData } = await supabase.auth.getUser(accessToken);
+      customerId = authData.user?.id ?? null;
+    }
+
     const { data, error } = await supabase.rpc('create_guest_order', {
       p_recipient_name: name,
       p_phone: phone,
@@ -53,6 +60,7 @@ export async function POST(request: NextRequest) {
       p_latitude: Number.isFinite(latitude) ? latitude : null,
       p_longitude: Number.isFinite(longitude) ? longitude : null,
       p_delivery_fee: STORE_CONFIG.deliveryFee,
+      p_customer_id: customerId,
       p_items: items,
     });
 
