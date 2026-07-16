@@ -6,6 +6,7 @@ export type ProductRiskInput = {
   stock: number;
   duplicate: boolean;
   uploadsLastHour: number;
+  imageCount?: number;
 };
 
 export type ProductRiskResult = {
@@ -41,6 +42,8 @@ export function evaluateProductRisk(input: ProductRiskInput): ProductRiskResult 
   if (input.stock > 100_000) { reasons.push('Stok tidak wajar'); score += 25; }
   if (input.duplicate) { reasons.push('Nama produk duplikat di toko'); score += 50; }
   if (input.uploadsLastHour >= 20) { reasons.push('Terlalu banyak upload dalam satu jam'); score += 60; }
+  if ((input.imageCount ?? 0) < 2) { reasons.push('Minimal 2 foto produk diperlukan'); score += 30; }
+  if ((input.imageCount ?? 0) > 8) { reasons.push('Maksimal 8 foto produk'); score += 40; }
   if (/(wa\.me|https?:\/\/|t\.me|telegram)/i.test(combined)) { reasons.push('Tautan eksternal pada produk'); score += 40; }
 
   return { safe: score === 0, score, reasons };
