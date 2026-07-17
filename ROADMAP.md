@@ -1,7 +1,7 @@
 # SiBantu V2 — Product & Engineering Roadmap
 
 **Terakhir diperbarui:** 16 Juli 2026  
-**Status proyek:** Aktif — Marketplace foundation + seller onboarding  
+**Status proyek:** Aktif — Seller Center Completion sebelum Owner Admin Center  
 **Production:** https://sibantu-v2-app.vercel.app  
 **Repository:** https://github.com/zhoniandre-lab/SiBantu-v2  
 **Last verified production commit:** `a4a18ec` — Mitra Phase 2, Vercel Success
@@ -61,6 +61,11 @@ Aturan ini tidak boleh dilewati:
 | Beras | Kemasan 5 kg; permintaan 1 kg diarahkan ke admin |
 | Multi-penjual | Ya, satu checkout dapat dipecah ke beberapa toko |
 | Moderasi | Hybrid: toko disetujui admin sekali; produk normal auto-publish setelah validasi; produk berisiko/terlapor masuk review admin |
+| Akun | Satu akun dapat menjadi pembeli sekaligus seller; dashboard dipisahkan |
+| Login cepat | Email magic link/password terlebih dahulu; WhatsApp/phone hanya setelah OTP aman tersedia |
+| Media produk | Produk seller baru: minimal 2 foto untuk tayang, maksimal 8; video opsional |
+| Review | Hanya pembeli dengan order completed yang dapat memberi rating/review |
+| Promosi | Notifikasi/WhatsApp hanya untuk pengguna yang memberi marketing consent dan dapat unsubscribe |
 | AI | Core deterministik + AI tools + human handoff |
 
 ---
@@ -247,18 +252,26 @@ Legenda:
 - [x] Product API terlindungi (401 tanpa login)
 - [x] Order API terlindungi (401 tanpa login)
 - [x] Dashboard Mitra aktif (HTTP 200)
-- [ ] Test create product
-- [ ] Terapkan auto-publish untuk produk normal dari toko aktif
-- [ ] Terapkan validation/risk flags
+- [x] Test create product
+- [x] Terapkan auto-publish untuk produk normal dari toko aktif
+- [x] Terapkan validation/risk flags
 - [ ] Buat admin moderation hanya untuk produk flagged/reported
-- [ ] Produk seller tampil di marketplace
-- [ ] Test store order nyata
-- [ ] Test status order
-- [ ] Test seller net
+- [x] Produk seller tampil di marketplace
+- [x] Test store order nyata
+- [x] Test status order dengan tombol simpan + alasan cancel
+- [x] Test seller net
+- [x] Upload foto produk dasar
+- [x] Kartu marketplace dapat diklik
+- [x] Product media gallery: minimal 2, maksimal 8 foto
+- [x] Video produk opsional
+- [x] Nama toko, rating, sold count pada kartu/detail
+- [x] Product/store reviews terverifikasi
+- [x] Seller Performance page dan event analytics
+- [x] Seller Full Product Editor
 
-**NEXT ACTION:** upload `copy-sibantu-mitra-phase2.html` sampai seluruh file selesai.
+**NEXT ACTION:** Seller Center Completion — store settings, review inbox/reply, finance/payout, dan banner manager.
 
-**DoD:** seller dapat mengelola produk dan order miliknya, admin dapat memoderasi produk.
+**DoD:** seller dapat mengelola produk/order, produk memiliki media dan reputasi, pelanggan dapat menilai order completed.
 
 ---
 
@@ -289,16 +302,23 @@ Legenda:
 
 ---
 
-### Fase 9 — Customer Account ⏳
+### Fase 9 — Customer Account 🟡
 
-- [ ] Customer login opsional
+- [x] Satu akun multi-role: customer + seller
+- [x] Customer login email magic link/password
+- [ ] Phone/WhatsApp login hanya dengan OTP provider
 - [ ] Guest-to-account migration
-- [ ] Saved addresses
-- [ ] Order history
-- [ ] Repeat order
+- [x] Saved addresses
+- [x] Order history
+- [x] Repeat order / beli lagi
 - [ ] Favorites
 - [ ] Subscription weekly basket
-- [ ] Notifications
+- [x] Notification center
+- [x] Marketing consent email
+- [x] Unsubscribe/opt-out
+- [x] Bottom navigation
+- [x] Status order visual
+- [x] Verified product review form
 
 ---
 
@@ -484,8 +504,9 @@ Aturan penting:
 
 1. ~~Upload 5 file Phase 2.~~ ✅
 2. ~~Test dashboard dan API protection.~~ ✅
-3. Tambah satu produk seller. **NEXT**
-4. Pastikan status pending.
+3. ~~Tambah satu produk seller.~~ ✅
+4. ~~Auto-publish produk aman dan tampil di katalog.~~ ✅
+5. Test seller menerima sub-order multi-toko. **NEXT**
 
 ### Milestone B — Product Moderation
 
