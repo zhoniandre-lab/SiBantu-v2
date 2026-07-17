@@ -73,7 +73,7 @@ function ProductCard({
       </div>
       <div className="product-copy">
         <div className="stock-line">
-          <span>{product.stock > 0 ? `Tersedia • ${product.stock}` : 'Stok habis'}</span>
+          <span>{product.storeIsAcceptingOrders === false ? 'Toko tutup' : product.stock > 0 ? `Tersedia • ${product.stock}` : 'Stok habis'}</span>
           {cartQty > 0 && <b>{formatQty(cartQty)} {product.unit} di keranjang</b>}
         </div>
         <h3>{product.name}</h3>
@@ -88,7 +88,7 @@ function ProductCard({
           <button
             className={cartQty > 0 ? 'added' : ''}
             onClick={(event) => { event.stopPropagation(); onAdd(); }}
-            disabled={product.stock <= 0}
+            disabled={product.stock <= 0 || product.storeIsAcceptingOrders === false}
             aria-label={`Tambah ${product.name}`}
           >
             {cartQty > 0 ? '✓' : '+'}
@@ -721,7 +721,7 @@ export default function SiBantuApp() {
             <small>{selectedProduct.category.toUpperCase()}</small>
             <h2>{selectedProduct.name}</h2>
             <div className="product-reputation"><span>⭐ {selectedProduct.averageRating?.toFixed(1)||'0.0'} ({selectedProduct.reviewCount||0} ulasan)</span><span>{formatQty(selectedProduct.soldCount||0)} terjual</span></div>
-            <div className="store-reputation">🏪 <b>{selectedProduct.storeName||'SiBantu'}</b><span>⭐ {selectedProduct.storeRating?.toFixed(1)||'0.0'} ({selectedProduct.storeReviewCount||0})</span></div>
+            <div className="store-reputation">🏪 {selectedProduct.storeSlug?<a href={`/toko/${selectedProduct.storeSlug}`}>{selectedProduct.storeName||'SiBantu'}</a>:<b>{selectedProduct.storeName||'SiBantu'}</b>}<small className={selectedProduct.storeIsAcceptingOrders?'open':'closed'}>{selectedProduct.storeIsAcceptingOrders?'Buka':'Tutup'}</small><span>⭐ {selectedProduct.storeRating?.toFixed(1)||'0.0'} ({selectedProduct.storeReviewCount||0})</span></div>
             <p>{selectedProduct.description}</p>
             <div className="review-preview"><div><b>Ulasan pembeli</b><span>{selectedProduct.reviewCount||0} ulasan terverifikasi</span></div>{!productReviews.length?<p>Belum ada ulasan untuk produk ini.</p>:productReviews.slice(0,3).map(review=><article key={review.id}><header><b>{review.buyerName}</b><span>{'★'.repeat(review.rating)}{'☆'.repeat(5-review.rating)}</span></header><p>{review.comment||'Pembeli memberikan rating tanpa komentar.'}</p>{review.sellerReply&&<small>Balasan seller: {review.sellerReply}</small>}</article>)}</div>
             <div className="picker-price"><strong>{rupiah(selectedProduct.price)}</strong><span>per {selectedProduct.unit}</span></div>
@@ -748,7 +748,8 @@ export default function SiBantuApp() {
               <div><strong>{formatQty(pickerQty)}</strong><span>{selectedProduct.unit}</span></div>
               <button onClick={() => setPickerQty((current) => current + (selectedProduct.step ?? 1))}>+</button>
             </div>
-            <button className="picker-confirm" onClick={confirmProductPicker}>
+            {selectedProduct.storeIsAcceptingOrders === false && <div className="store-closed-note">Toko sedang tutup. Produk dapat dilihat tetapi belum dapat dipesan.</div>}
+            <button className="picker-confirm" disabled={selectedProduct.storeIsAcceptingOrders === false} onClick={confirmProductPicker}>
               <span>Masukkan ke keranjang</span><strong>{rupiah(selectedProduct.price * pickerQty)}</strong>
             </button>
             <a
