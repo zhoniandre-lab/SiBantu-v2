@@ -65,7 +65,7 @@ export async function POST(request: NextRequest) {
 
   const aliasRows = [...new Set([name.toLowerCase(), ...aliases])].map((alias) => ({ product_id: product.id, alias }));
   if (aliasRows.length) await auth.supabase.from('product_aliases').insert(aliasRows);
-  return NextResponse.json({ ok: true, productId: product.id, status: moderationStatus, autoPublished: risk.safe, riskScore: risk.score, reasons: risk.reasons });
+  return NextResponse.json({ ok: true, productId: product.id, status: moderationStatus, autoPublished: risk.safe, riskScore: risk.score, reasons: risk.reasons, mediaCount: mediaRows.length, imageCount: imageUrls.length, videoSaved: Boolean(videoUrl) });
 }
 
 export async function PATCH(request: NextRequest) {
@@ -151,5 +151,6 @@ export async function PATCH(request: NextRequest) {
     if(aliasRows.length)await auth.supabase.from('product_aliases').insert(aliasRows);
   }
 
-  return NextResponse.json({ok:true,status:moderationStatus,autoPublished:moderationStatus==='approved',active:moderationStatus==='approved'&&nextActive});
+  const finalMedia = mediaChanged ? [...(imageUrls || []), ...(videoUrl ? [videoUrl] : [])] : (current.product_media || []).map((item:any)=>item.url);
+  return NextResponse.json({ok:true,status:moderationStatus,autoPublished:moderationStatus==='approved',active:moderationStatus==='approved'&&nextActive,mediaCount:finalMedia.length,imageCount:mediaChanged?(imageUrls||[]).length:(current.product_media||[]).filter((item:any)=>item.media_type==='image').length,videoSaved:mediaChanged?Boolean(videoUrl):(current.product_media||[]).some((item:any)=>item.media_type==='video')});
 }
