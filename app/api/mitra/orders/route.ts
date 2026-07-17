@@ -49,7 +49,30 @@ export async function PATCH(request: NextRequest) {
   if (status === 'preparing') timestamps.prepared_at = new Date().toISOString();
   const { error } = await auth.supabase.from('store_orders').update({ status, ...timestamps }).eq('id', orderId).eq('store_id', auth.store.id);
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  const { data: siblingOrders } = await auth.supabase.from('store_orders').select('status').eq('order_id', current.order_id);
+  const statuses = (siblingOrders ?? []).map((item) => item.status);
+  let parentStatus = 'pending';
+  if (statuses.length && statuses.every((item) => item === 'completed')) parentStatus = 'completed';
+  else if (statuses.length && statuses.every((item) => item === 'cancelled')) parentStatus = 'cancelled';
+  else if (statuses.some((item) => item === 'delivering')) parentStatus = 'delivering';
+  else if (statuses.some((item) => item === 'preparing')) parentStatus = 'preparing';
+  else if (statuses.some((item) => item === 'confirmed' || item === 'completed')) parentStatus = 'confirmed';
+
+  const { data: parentOrder } = await auth.supabase.from('orders').update({ status: parentStatus, updated_at: new Date().toISOString() }).eq('id', current.order_id).select('customer_id,order_number').maybeSingle();
   const historyNote = status === 'cancelled' ? `Dibatalkan oleh toko ${auth.store.name}: ${reason}` : `Status diperbarui oleh toko ${auth.store.name}`;
-  await auth.supabase.from('order_status_history').insert({ order_id: current.order_id, status, note: historyNote });
-  return NextResponse.json({ ok: true, status });
+  await auth.supabase.from('order_status_history').insert({ order_id: current.order_id, status: parentStatus, note: historyNote });
+
+  if (parentOrder?.customer_id) {
+    const messages: Record<string, { title: string; body: string }> = {
+      confirmed: { title: 'Pesanan diterima toko', body: `${parentOrder.order_number} sudah diterima dan barang sedang dicarikan.` },
+      preparing: { title: 'Pesanan sedang disiapkan', body: `${parentOrder.order_number} sedang disiapkan oleh pedagang.` },
+      delivering: { title: 'Pesanan siap diantar', body: `${parentOrder.order_number} sedang menuju alamatmu. Siapkan uang pas untuk COD.` },
+      completed: { title: 'Pesanan selesai', body: `${parentOrder.order_number} selesai. Berikan penilaian untuk produk dan toko.` },
+      cancelled: { title: 'Pesanan dibatalkan', body: `${parentOrder.order_number} dibatalkan. Hubungi admin jika perlu bantuan.` },
+    };
+    const notification = messages[parentStatus];
+    if (notification) await auth.supabase.from('notifications').insert({ profile_id: parentOrder.customer_id, notification_type: `order_${parentStatus}`, title: notification.title, body: notification.body, link_url: '/akun/dashboard?tab=orders' });
+  }
+
+  return NextResponse.json({ ok: true, status, orderStatus: parentStatus });
 }
