@@ -41,6 +41,11 @@ export type Product = {
   soldCount?: number;
   storeRating?: number;
   storeReviewCount?: number;
+  storeSlug?: string;
+  storeLogoUrl?: string;
+  storeIsAcceptingOrders?: boolean;
+  storePreparationMinutes?: number;
+  storeMinOrder?: number;
 };
 
 export type CartItem = {
