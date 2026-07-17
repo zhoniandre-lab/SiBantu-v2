@@ -3,6 +3,7 @@
 import { FormEvent, useEffect, useMemo, useRef, useState } from 'react';
 import { CATEGORIES, PRODUCTS, findProduct } from '@/lib/catalog';
 import { formatQty, makeId, rupiah } from '@/lib/format';
+import MobileBottomNav from '@/components/navigation/MobileBottomNav';
 import { requestChatWithCanary } from '@/lib/chat-v03/client';
 import { getBrowserSupabase } from '@/lib/supabase/client';
 import { adminWhatsAppUrl, STORE_CONFIG } from '@/lib/store-config';
@@ -144,6 +145,10 @@ export default function SiBantuApp() {
     } catch {
       setCart([]);
     }
+  }, []);
+
+  useEffect(() => {
+    if (new URLSearchParams(window.location.search).get('view') === 'store') setView('store');
   }, []);
 
   useEffect(() => {
@@ -801,6 +806,7 @@ export default function SiBantuApp() {
           </section>
         </div>
       )}
+      <MobileBottomNav active={view === 'store' ? 'menu' : 'home'} />
     </main>
   );
 }
