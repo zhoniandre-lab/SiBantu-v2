@@ -75,6 +75,18 @@ begin
     raise exception 'PRODUCT_OR_STOCK_INVALID';
   end if;
 
+  if exists (
+    select 1 from tmp_order_items t join stores s on s.id=t.store_id
+    where s.is_accepting_orders=false or (s.vacation_until is not null and s.vacation_until>now())
+  ) then raise exception 'STORE_NOT_ACCEPTING_ORDERS'; end if;
+
+  if exists (
+    select 1 from (
+      select t.store_id,sum(t.line_total) subtotal from tmp_order_items t group by t.store_id
+    ) totals join stores s on s.id=totals.store_id
+    where totals.subtotal < s.min_order
+  ) then raise exception 'STORE_MIN_ORDER_NOT_MET'; end if;
+
   select coalesce(sum(line_total), 0) into v_subtotal from tmp_order_items;
   v_total := v_subtotal + greatest(coalesce(p_delivery_fee, 0), 0);
 
