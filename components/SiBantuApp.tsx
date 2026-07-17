@@ -194,6 +194,12 @@ export default function SiBantuApp() {
     return catalogProducts.find((product) => product.id === id) ?? findProduct(id);
   }
 
+  function trackProductEvent(eventType: string, productId: number, source?: string) {
+    if (!sessionId) return;
+    const eventSource = source ?? (view === 'store' ? 'store' : 'chat');
+    void fetch('/api/events', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ eventType, productId, sessionId, source: eventSource }), keepalive: true }).catch(() => undefined);
+  }
+
   const cartCount = cart.length;
   const subtotal = cart.reduce((sum, item) => sum + (productById(item.productId)?.price ?? 0) * item.qty, 0);
   const deliveryFee = cart.length ? STORE_CONFIG.deliveryFee : 0;
@@ -212,6 +218,14 @@ export default function SiBantuApp() {
     });
   }, [category, query, catalogProducts]);
 
+  useEffect(() => {
+    if (!sessionId || query.trim().length < 2) return;
+    const timer = setTimeout(() => {
+      void fetch('/api/events', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ eventType: 'search', query, category, resultCount: visibleProducts.length, sessionId }), keepalive: true }).catch(() => undefined);
+    }, 700);
+    return () => clearTimeout(timer);
+  }, [query, category, visibleProducts.length, sessionId]);
+
   function showCartToast(productName: string, qty: number, unit: string) {
     if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
     setToast({ id: Date.now(), text: `${formatQty(qty)} ${unit} ${productName} masuk ke keranjang` });
@@ -219,6 +233,7 @@ export default function SiBantuApp() {
   }
 
   function openProductPicker(product: Product) {
+    trackProductEvent('view', product.id);
     setSelectedProduct(product);
     setSelectedMediaIndex(0);
     setPickerQty(product.quickQuantities?.[0] ?? product.step ?? 1);
@@ -233,7 +248,7 @@ export default function SiBantuApp() {
 
   function addToCart(productId: number, qty = 1, note?: string) {
     const product = productById(productId);
-    if (product) showCartToast(product.name, qty, product.unit);
+    if (product) { showCartToast(product.name, qty, product.unit); trackProductEvent('add_cart', productId); }
     setCart((current) => {
       const existing = current.find((item) => item.productId === productId);
       if (existing) return current.map((item) => (item.productId === productId ? { ...item, qty: item.qty + qty, note: note ?? item.note } : item));
@@ -423,6 +438,7 @@ export default function SiBantuApp() {
     setCheckoutStep(1);
     setCheckoutErrors({});
     setCartOpen(false);
+    cart.forEach((item) => trackProductEvent('checkout', item.productId, 'checkout'));
     setCheckoutOpen(true);
   }
 
@@ -476,6 +492,7 @@ export default function SiBantuApp() {
       : 'GPS belum dibagikan';
     const databaseStatus = saved ? 'Tersimpan di sistem' : 'Belum tersimpan di database — konfirmasi via WhatsApp';
     const message = `*ORDER SIBANTU ${finalOrderNumber}*\nStatus: ${databaseStatus}\n\n*Asal:* ${STORE_CONFIG.pickupAddress}\n*Penerima:* ${checkout.name}\n*WhatsApp:* ${checkout.whatsapp}\n*Alamat tujuan:* ${checkout.address}\n*Patokan:* ${checkout.landmark || '-'}\n*Lokasi GPS:* ${mapsLink}\n\n*BELANJAAN*\n${itemLines}\n\nSubtotal: ${rupiah(subtotal)}\nOngkir: ${rupiah(deliveryFee)}\n*TOTAL: ${rupiah(grandTotal)}*\nPembayaran: ${STORE_CONFIG.paymentMethod}\n\nMohon konfirmasi ketersediaan dan waktu pengantaran.`;
+    if (saved) cart.forEach((item) => trackProductEvent('purchase', item.productId, 'checkout'));
     setOrderSaved(saved);
     setOrderSaving(false);
     window.open(adminWhatsAppUrl(message), '_blank', 'noopener,noreferrer');
@@ -739,6 +756,7 @@ export default function SiBantuApp() {
               href={adminWhatsAppUrl(`Halo Admin SiBantu, saya ingin bertanya tentang ${selectedProduct.name}.`)}
               target="_blank"
               rel="noreferrer"
+              onClick={() => trackProductEvent('chat_seller', selectedProduct.id)}
             >
               💬 Tanya pedagang tentang produk ini
             </a>
