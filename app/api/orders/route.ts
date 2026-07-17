@@ -66,7 +66,8 @@ export async function POST(request: NextRequest) {
 
     if (error) {
       console.error('create_guest_order:', error.message);
-      return NextResponse.json({ ok: false, saved: false, fallback: 'whatsapp', error: 'Pesanan belum tersimpan. Lanjutkan melalui WhatsApp.' }, { status: 500 });
+      const friendly = error.message.includes('STORE_NOT_ACCEPTING_ORDERS') ? 'Salah satu toko sedang tutup dan belum menerima order.' : error.message.includes('STORE_MIN_ORDER_NOT_MET') ? 'Belanja dari salah satu toko belum mencapai minimum order.' : error.message.includes('PRODUCT_OR_STOCK_INVALID') ? 'Produk atau stok berubah. Periksa keranjang kembali.' : 'Pesanan belum tersimpan. Lanjutkan melalui WhatsApp.';
+      return NextResponse.json({ ok: false, saved: false, fallback: 'whatsapp', error: friendly }, { status: 409 });
     }
 
     return NextResponse.json({ ok: true, saved: true, order: data });
