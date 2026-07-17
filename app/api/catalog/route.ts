@@ -8,7 +8,7 @@ export async function GET() {
   if (!supabase) return NextResponse.json({ error: 'Database belum aktif.' }, { status: 503 });
   const { data, error } = await supabase
     .from('products')
-    .select('id,name,description,emoji,image_url,store_id,stores(name),categories(slug),product_variants(label,unit,price,stock,is_default,is_active),product_aliases(alias),product_media(id,media_type,url,thumbnail_url,sort_order,moderation_status)')
+    .select('id,name,description,emoji,image_url,store_id,stores(name,slug,logo_url,is_accepting_orders,preparation_minutes,min_order),categories(slug),product_variants(label,unit,price,stock,is_default,is_active),product_aliases(alias),product_media(id,media_type,url,thumbnail_url,sort_order,moderation_status)')
     .eq('is_active', true)
     .eq('moderation_status', 'approved')
     .order('id', { ascending: true });
@@ -41,6 +41,10 @@ export async function GET() {
       media, category: one(row.categories)?.slug, price: Number(variant.price), unit: variant.unit,
       aliases: (row.product_aliases || []).map((item: any) => item.alias), stock: Number(variant.stock),
       storeName: one(row.stores)?.name || 'SiBantu', storeId: row.store_id,
+      storeSlug: one(row.stores)?.slug, storeLogoUrl: one(row.stores)?.logo_url,
+      storeIsAcceptingOrders: Boolean(one(row.stores)?.is_accepting_orders),
+      storePreparationMinutes: Number(one(row.stores)?.preparation_minutes || 30),
+      storeMinOrder: Number(one(row.stores)?.min_order || 0),
       averageRating: Number(rating?.average_rating || 0), reviewCount: Number(rating?.review_count || 0),
       soldCount: Number(sales?.sold_quantity || 0), storeRating: Number(storeRating?.average_rating || 0),
       storeReviewCount: Number(storeRating?.review_count || 0),
