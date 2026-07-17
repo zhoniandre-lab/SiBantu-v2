@@ -117,6 +117,7 @@ export default function SiBantuApp() {
   const [orderSaving, setOrderSaving] = useState(false);
   const [orderSaved, setOrderSaved] = useState(false);
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
+  const [productReviews, setProductReviews] = useState<{id:string;rating:number;comment?:string;sellerReply?:string;buyerName:string;createdAt:string;verified:boolean}[]>([]);
   const [selectedMediaIndex, setSelectedMediaIndex] = useState(0);
   const [pickerQty, setPickerQty] = useState(1);
   const [pickerNote, setPickerNote] = useState('');
@@ -157,6 +158,22 @@ export default function SiBantuApp() {
       .then((data) => { if (data?.products?.length) setCatalogProducts(data.products); })
       .catch(() => undefined);
   }, []);
+
+  useEffect(() => {
+    const productId = Number(new URLSearchParams(window.location.search).get('product'));
+    if (Number.isInteger(productId)) {
+      const product = catalogProducts.find((item) => item.id === productId);
+      if (product && selectedProduct?.id !== productId) openProductPicker(product);
+    }
+  }, [catalogProducts]);
+
+  useEffect(() => {
+    if (!selectedProduct) { setProductReviews([]); return; }
+    fetch(`/api/reviews?productId=${selectedProduct.id}`)
+      .then((response) => response.ok ? response.json() : null)
+      .then((data) => setProductReviews(data?.reviews || []))
+      .catch(() => setProductReviews([]));
+  }, [selectedProduct?.id]);
 
   useEffect(() => {
     return () => {
@@ -689,6 +706,7 @@ export default function SiBantuApp() {
             <div className="product-reputation"><span>⭐ {selectedProduct.averageRating?.toFixed(1)||'0.0'} ({selectedProduct.reviewCount||0} ulasan)</span><span>{formatQty(selectedProduct.soldCount||0)} terjual</span></div>
             <div className="store-reputation">🏪 <b>{selectedProduct.storeName||'SiBantu'}</b><span>⭐ {selectedProduct.storeRating?.toFixed(1)||'0.0'} ({selectedProduct.storeReviewCount||0})</span></div>
             <p>{selectedProduct.description}</p>
+            <div className="review-preview"><div><b>Ulasan pembeli</b><span>{selectedProduct.reviewCount||0} ulasan terverifikasi</span></div>{!productReviews.length?<p>Belum ada ulasan untuk produk ini.</p>:productReviews.slice(0,3).map(review=><article key={review.id}><header><b>{review.buyerName}</b><span>{'★'.repeat(review.rating)}{'☆'.repeat(5-review.rating)}</span></header><p>{review.comment||'Pembeli memberikan rating tanpa komentar.'}</p>{review.sellerReply&&<small>Balasan seller: {review.sellerReply}</small>}</article>)}</div>
             <div className="picker-price"><strong>{rupiah(selectedProduct.price)}</strong><span>per {selectedProduct.unit}</span></div>
             <div className="picker-label"><b>Pilih jumlah</b><span>Bisa diubah lagi di keranjang</span></div>
             <div className="quick-quantities">
